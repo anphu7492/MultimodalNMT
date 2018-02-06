@@ -1,9 +1,10 @@
-# OpenNMT-py: Open-Source Neural Machine Translation
+# Multi-modal Neural Machine Translation
+## OpenNMT-py: Open-Source Neural Machine Translation
 
 [![Build Status](https://travis-ci.org/OpenNMT/OpenNMT-py.svg?branch=master)](https://travis-ci.org/OpenNMT/OpenNMT-py)
 
-This is the implementation of multi-modal neural machine translation models, described in [the research paper](http://aclweb.org/anthology/D17-1105).
-Its implementation is based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system. It is designed to be research friendly to try out new ideas in translation, summary, image-to-text, morphology, and many other domains.
+This is the implementation of *three multi-modal neural machine translation models*, described in [this research paper](http://aclweb.org/anthology/D17-1105).
+Their implementation is based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system. It is designed to be research friendly to try out new ideas in translation, summary, image-to-text, morphology, and many other domains.
 
 OpenNMT-py is run as a collaborative open-source project. It is currently maintained by [Sasha Rush](http://github.com/srush) (Cambridge, MA), [Ben Peters](http://github.com/bpopeters) (Saarbrücken), and [Jianyu Zhan](http://github.com/jianyuzhan) (Shenzhen). The original code was written by [Adam Lerer](http://github.com/adamlerer) (NYC). Codebase is nearing a stable 0.1 version. We currently recommend forking if you want stable code.
 
@@ -20,8 +21,10 @@ Table of Contents
  
 ## Requirements
 
+```
 torchtext>=0.2.1
 pytorch>=0.2
+```
 
 In case one of the two are missing or not up-to-date and assuming you installed pytorch using the conda package manager and torchtext using pip, you might want to run the following:
 
