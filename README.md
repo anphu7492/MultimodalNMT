@@ -3,12 +3,9 @@
 
 [![Build Status](https://travis-ci.org/OpenNMT/OpenNMT-py.svg?branch=master)](https://travis-ci.org/OpenNMT/OpenNMT-py)
 
-This is the implementation of *three multi-modal neural machine translation models*, described in [this research paper](http://aclweb.org/anthology/D17-1105).
-Their implementation is based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system. It is designed to be research friendly to try out new ideas in translation, summary, image-to-text, morphology, and many other domains.
+This is the implementation of *three different multi-modal neural machine translation models* described in [this research paper](http://aclweb.org/anthology/D17-1105).
+They are based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system.
 
-OpenNMT-py is run as a collaborative open-source project. It is currently maintained by [Sasha Rush](http://github.com/srush) (Cambridge, MA), [Ben Peters](http://github.com/bpopeters) (Saarbrücken), and [Jianyu Zhan](http://github.com/jianyuzhan) (Shenzhen). The original code was written by [Adam Lerer](http://github.com/adamlerer) (NYC). Codebase is nearing a stable 0.1 version. We currently recommend forking if you want stable code.
-
-<center style="padding: 40px"><img width="70%" src="http://opennmt.github.io/simple-attn.png" /></center>
 
 Table of Contents
 =================
@@ -76,7 +73,7 @@ This will use GPU 0 to extract features with the pre-trained VGG19 with batch no
 
 ### Step 1: Preprocess the data
 
-Pre-process the training data. That is the same way as you would do with a text-only NMT model. Important: the preprocessing script only uses the textual portion of the multi-modal machine translation data set!
+That is the same way as you would do with a text-only NMT model. **Important**: *the preprocessing script only uses the textual portion of the multi-modal machine translation data set*!
 
 In here, we assume you have downloaded the [Multi30k data set](http://www.statmt.org/wmt16/multimodal-task.html) and extracted the sentences in its training, validation and test sets. After pre-processing them (e.g. tokenising, lowercasing, and applying a [BPE model](https://github.com/rsennrich/subword-nmt)), feed the training and validation sets to the `preprocess.py` script, as below.
 
@@ -87,7 +84,7 @@ python preprocess.py -train_src /path/to/flickr30k/train.norm.tok.lc.bpe10000.en
 
 ### Step 2: Train the model
 
-To train a multi-modal NMT model, use the `train_mm.py` script. In addition to the parameters accepted by the standard `train.py` (that trains a text-only NMT model), this script expects the path to the training and validation image features, as well as the multi-modal model type (one of 'imgd', 'imge', or 'imgw').
+To train a multi-modal NMT model, use the `train_mm.py` script. In addition to the parameters accepted by the standard `train.py` (that trains a text-only NMT model), this script expects the path to the training and validation image features, as well as the multi-modal model type (one of `imgd`, `imge`, or `imgw`).
 
 For a complete description of the different multi-modal NMT model types, please refer to [the original paper where they are described](http://aclweb.org/anthology/D17-1105).
 
