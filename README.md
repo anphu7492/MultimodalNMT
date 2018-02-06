@@ -2,32 +2,35 @@
 
 [![Build Status](https://travis-ci.org/OpenNMT/OpenNMT-py.svg?branch=master)](https://travis-ci.org/OpenNMT/OpenNMT-py)
 
-This is a [Pytorch](https://github.com/pytorch/pytorch)
-port of [OpenNMT](https://github.com/OpenNMT/OpenNMT),
-an open-source (MIT) neural machine translation system. It is designed to be research friendly to try out new ideas in translation, summary, image-to-text, morphology, and many other domains.
-
+This is the implementation of multi-modal neural machine translation models, described in [the research paper](http://aclweb.org/anthology/D17-1105).
+Its implementation is based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system. It is designed to be research friendly to try out new ideas in translation, summary, image-to-text, morphology, and many other domains.
 
 OpenNMT-py is run as a collaborative open-source project. It is currently maintained by [Sasha Rush](http://github.com/srush) (Cambridge, MA), [Ben Peters](http://github.com/bpopeters) (Saarbrücken), and [Jianyu Zhan](http://github.com/jianyuzhan) (Shenzhen). The original code was written by [Adam Lerer](http://github.com/adamlerer) (NYC). Codebase is nearing a stable 0.1 version. We currently recommend forking if you want stable code.
 
-We love contributions. Please consult the Issues page for any [Contributions Welcome](https://github.com/OpenNMT/OpenNMT-py/issues?q=is%3Aissue+is%3Aopen+label%3A%22contributions+welcome%22) tagged post. 
-
 <center style="padding: 40px"><img width="70%" src="http://opennmt.github.io/simple-attn.png" /></center>
-
 
 Table of Contents
 =================
-  * [Full Documentation](http://opennmt.net/OpenNMT-py/)
   * [Requirements](#requirements)
   * [Features](#features)
-  * [Quickstart](#quickstart)
+  * [Multi-modal NMT Quickstart](#quickstart)
   * [Citation](#citation)
+
+[Full Documentation](http://opennmt.net/OpenNMT-py/)
  
 ## Requirements
 
-```bash
-pip install -r requirements.txt
-```
+torchtext>=0.2.1
+pytorch>=0.2
 
+In case one of the two are missing or not up-to-date and assuming you installed pytorch using the conda package manager and torchtext using pip, you might want to run the following:
+
+```bash
+conda update pytorch
+pip install torchtext --upgrade
+pip install -r requirements.txt
+pip install pretrainedmodels
+```
 
 ## Features
 
@@ -51,73 +54,77 @@ Beta Features (committed):
 - SRU "RNNs faster than CNN" paper
 - Inference time loss functions.
 
-## Quickstart
+## Multi-modal NMT Quickstart
 
-[Full Documentation](http://opennmt.net/OpenNMT-py/)
+### Step 0: Extract the image features for the Multi30k data set.
+
+If you are using features extracted by someone else, you can skip this step.
+
+We assume you have downloaded the [Multi30k data set](http://www.statmt.org/wmt16/multimodal-task.html) and have the training, validation and test images locally (make sure you download the `test2016` test set). Together with the image files, you need text files with the image file names in the training, validation, and test sets, respectively. These are named `train_images.txt`,`val_images.txt`, and `test_images.txt`, and are part of the original Flickr30k data set. If you download them from the [WMT Multi-modal MT shared task website](http://www.statmt.org/wmt16/multimodal-task.html), you might need to adjust the file names accordingly.
+
+In order to extract the image features, run the following script:
+
+```bash
+python extract_image_features.py --gpuid 0 --pretrained_cnn vgg19_bn --splits=train,valid,test --images_path /path/to/flickr30k/images/ --train_fnames /path/to/flickr30k/train_images.txt --valid_fnames /path/to/flickr30k/val_images.txt --test_fnames /path/to/flickr30k/test2016_images.txt
+```
+
+This will use GPU 0 to extract features with the pre-trained VGG19 with batch normalisation, for the training, validation and test sets of the Flickr30k. Change the name of the pre-trained CNN to any of the CNNs available under [this repository](https://github.com/Cadene/pretrained-models.pytorch), and the model will automatically use this CNN to extract features.
 
 
 ### Step 1: Preprocess the data
 
+Pre-process the training data. That is the same way as you would do with a text-only NMT model. Important: the preprocessing script only uses the textual portion of the multi-modal machine translation data set!
+
+In here, we assume you have downloaded the [Multi30k data set](http://www.statmt.org/wmt16/multimodal-task.html) and extracted the sentences in its training, validation and test sets. After pre-processing them (e.g. tokenising, lowercasing, and applying a [BPE model](https://github.com/rsennrich/subword-nmt)), feed the training and validation sets to the `preprocess.py` script, as below.
+
 ```bash
-python preprocess.py -train_src data/src-train.txt -train_tgt data/tgt-train.txt -valid_src data/src-val.txt -valid_tgt data/tgt-val.txt -save_data data/demo
+python preprocess.py -train_src /path/to/flickr30k/train.norm.tok.lc.bpe10000.en -train_tgt /path/to/flickr30k/train.norm.tok.lc.bpe10000.de -valid_src /path/to/flickr30k/val.norm.tok.lc.bpe10000.en -valid_tgt /path/to/flickr30k/val.norm.tok.lc.bpe10000.de -save_data data/m30k
 ```
 
-We will be working with some example data in `data/` folder.
-
-The data consists of parallel source (`src`) and target (`tgt`) data containing one sentence per line with tokens separated by a space:
-
-* `src-train.txt`
-* `tgt-train.txt`
-* `src-val.txt`
-* `tgt-val.txt`
-
-Validation files are required and used to evaluate the convergence of the training. It usually contains no more than 5000 sentences.
-
-
-After running the preprocessing, the following files are generated:
-
-* `demo.train.pt`: serialized PyTorch file containing training data
-* `demo.valid.pt`: serialized PyTorch file containing validation data
-* `demo.vocab.pt`: serialized PyTorch file containing vocabulary data
-
-
-Internally the system never touches the words themselves, but uses these indices.
 
 ### Step 2: Train the model
 
-```bash
-python train.py -data data/demo -save_model demo-model
-```
+To train a multi-modal NMT model, use the `train_mm.py` script. In addition to the parameters accepted by the standard `train.py` (that trains a text-only NMT model), this script expects the path to the training and validation image features, as well as the multi-modal model type (one of 'imgd', 'imge', or 'imgw').
 
-The main train command is quite simple. Minimally it takes a data file
-and a save file.  This will run the default model, which consists of a
-2-layer LSTM with 500 hidden units on both the encoder/decoder. You
-can also add `-gpuid 1` to use (say) GPU 1.
-
-### Step 3: Translate
+For a complete description of the different multi-modal NMT model types, please refer to [the original paper where they are described](http://aclweb.org/anthology/D17-1105).
 
 ```bash
-python translate.py -model demo-model_acc_XX.XX_ppl_XXX.XX_eX.pt -src data/src-test.txt -output pred.txt -replace_unk -verbose
+python train_mm.py -data data/m30k -save_model model_snapshots/IMGD_ADAM -gpuid 0 -epochs 25 -batch_size 40 -path_to_train_img_feats /path/to/flickr30k/features/flickr30k_train_vgg19_bn_cnn_features.hdf5 -path_to_valid_img_feats /path/to/flickr30k/features/flickr30k_valid_vgg19_bn_cnn_features.hdf5 -optim adam -learning_rate 0.002 -use_nonlinear_projection --multimodal_model_type imgd
 ```
 
-Now you have a model which you can use to predict on new data. We do this by running beam search. This will output predictions into `pred.txt`.
+In case you want to continue training from a previous checkpoint, simply run (for example):
 
-!!! note "Note"
-    The predictions are going to be quite terrible, as the demo dataset is small. Try running on some larger datasets! For example you can download millions of parallel sentences for [translation](http://www.statmt.org/wmt16/translation-task.html) or [summarization](https://github.com/harvardnlp/sent-summary).
+```bash
+MODEL_SNAPSHOT=IMGD_ADAM_acc_60.79_ppl_8.38_e4.pt
+python train_mm.py -data data/m30k -save_model model_snapshots/IMGD_ADAM -gpuid 0 -epochs 25 -batch_size 40 -path_to_train_img_feats /path/to/flickr30k/features/flickr30k_train_vgg19_bn_cnn_features.hdf5 -path_to_valid_img_feats /path/to/flickr30k/features/flickr30k_valid_vgg19_bn_cnn_features.hdf5 -optim adam -learning_rate 0.002 -use_nonlinear_projection --multimodal_model_type imgd -train_from model_snapshots/${MODEL_SNAPSHOT}
+```
 
-## Pretrained embeddings (e.g. GloVe)
 
-Go to tutorial: [How to use GloVe pre-trained embeddings in OpenNMT-py](http://forum.opennmt.net/t/how-to-use-glove-pre-trained-embeddings-in-opennmt-py/1011)
+### Step 3: Translate new sentences
 
-## Pretrained Models
+To translate a new test set, simply use `translate_mm.py` similarly as you would use the original `translate.py` script, with the addition of the path to the file containing the test image features. In the example below, we translate the Multi30k test set used in the 2016 run of the WMT Multi-modal MT Shared Task.
 
-The following pretrained models can be downloaded and used with translate.py (These were trained with an older version of the code; they will be updated soon).
-
-- [onmt_model_en_de_200k](https://drive.google.com/file/d/0B6N7tANPyVeBWE9WazRYaUd2QTg/view?usp=sharing): An English-German translation model based on the 200k sentence dataset at [OpenNMT/IntegrationTesting](https://github.com/OpenNMT/IntegrationTesting/tree/master/data). Perplexity: 20.
-- onmt_model_en_fr_b1M (coming soon): An English-French model trained on benchmark-1M. Perplexity: 4.85.
-
+```bash
+MODEL_SNAPSHOT=IMGD_ADAM_acc_60.79_ppl_8.38_e4.pt
+python translate_mm.py -src ~/exp/opennmt_imgd/data_multi30k/test2016.norm.tok.lc.bpe10000.en -model model_snapshots/${MODEL_SNAPSHOT} -path_to_test_img_feats ~/resources/multi30k/features/flickr30k_test_vgg19_bn_cnn_features.hdf5 -output model_snapshots/${MODEL_SNAPSHOT}.translations-test2016
+```
 
 ## Citation
+
+If you use the multi-modal NMT models in this repository, please consider citing the [research paper where it is described](http://aclweb.org/anthology/D17-1105):
+
+```
+@InProceedings{Calixto2017EMNLP,
+  Title                    = {{Incorporating Global Visual Features into Attention-Based Neural Machine Translation}},
+  Author                   = {Iacer Calixto and Qun Liu},
+  Booktitle                = {Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing},
+  Year                     = {2017},
+  Address                  = {Copenhagen, Denmark},
+  Url                      = {http://aclweb.org/anthology/D17-1105}
+}
+```
+
+If you use OpenNMT, please cite as below.
 
 [OpenNMT technical report](https://doi.org/10.18653/v1/P17-4012)
 

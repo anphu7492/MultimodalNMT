@@ -446,6 +446,32 @@ def add_md_help_argument(parser):
                         help='print Markdown-formatted help text and exit.')
 
 
+#####################################################################
+# Multi-modal NMT command-line parameters
+#####################################################################
+
+def train_mm_opts(parser):
+    parser.add_argument('-path_to_train_img_feats', required=True,
+                        help="""Path to hdf5 file containing training image features""")
+    parser.add_argument('-path_to_valid_img_feats', required=True,
+                        help="""Path to hdf5 file containing validation image features""")
+    parser.add_argument('-dropout_imgs', type=float, default=0.5,
+                        help="Dropout probability applied to image features.")
+    parser.add_argument('-use_nonlinear_projection', action='store_true',
+                        help="""Use non-linear activation in the image features projection.""")
+    parser.add_argument('--multimodal_model_type', required=True, type=str,
+                        choices=['imgd', 'imge', 'imgw', 'src+img'],
+                        help="""Multi-modal NMT model type.""")
+    parser.add_argument('-multimodal_decoder_type', type=str, default='doubly-attentive-rnn',
+                        choices=['doubly-attentive-rnn'],
+                        help='Type of multimodal decoder layer to use.')
+
+def translate_mm_opts(parser):
+    parser.add_argument('-path_to_test_img_feats', required=True,
+                        help="""Path to hdf5 file containing test image features""")
+
+
+
 # MARKDOWN boilerplate
 
 # Copyright 2016 The Chromium Authors. All rights reserved.
