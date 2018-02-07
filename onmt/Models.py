@@ -7,7 +7,7 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 
 import onmt
 from onmt.Utils import aeq
-
+import sys
 
 class EncoderBase(nn.Module):
     """
@@ -629,7 +629,7 @@ class RNNDecoderState(DecoderState):
 
 class ImageGlobalFeaturesProjector(nn.Module):
     """
-        Project global image features using different transformations.
+        Project global image features using a 2-layer multi-layer perceptron.
     """
     def __init__(self, num_layers, nfeats, outdim, dropout,
             use_nonlinear_projection):
@@ -707,15 +707,15 @@ class RNNEncoderImageAsWord(EncoderBase):
 
         emb = self.embeddings(input)
         s_len, batch, emb_dim = emb.size()
-        # length after concatenating two new words to source
-        new_len = s_len+2
         # concatenate image features as source words
-        emb_new = torch.cat((img_feats[0].unsqueeze(0), emb, img_feats[1].unsqueeze(0)), 0)
-        assert(emb_new.size(0) == new_len), 'Dimensions do not match.'
+        emb = torch.cat((img_feats[0].unsqueeze(0), emb, img_feats[1].unsqueeze(0)), 0)
+        # length after concatenating two new words to source
+        assert(emb.size(0) == s_len+2), 'Dimensions do not match.'
 
-        #packed_emb = emb
-        packed_emb = emb_new
+        packed_emb = emb
         if lengths is not None and not self.no_pack_padded_seq:
+            # adjust lengths variable to include the two new "image-words"
+            lengths+=2
             # Lengths data is wrapped inside a Variable.
             lengths = lengths.view(-1).tolist()
             packed_emb = pack(emb, lengths)
@@ -724,6 +724,9 @@ class RNNEncoderImageAsWord(EncoderBase):
 
         if lengths is not None and not self.no_pack_padded_seq:
             outputs = unpack(outputs)[0]
+
+        # store updated lengths variable (could be needed in `translate_mm.py`)
+        self.updated_lengths = lengths
 
         return hidden_t, outputs
 
@@ -1017,15 +1020,16 @@ class NMTImgDModel(nn.Module):
         # project image features
         img_proj = self.encoder_images(img_feats)
 
-        src = src
         tgt = tgt[:-1]  # exclude last target from inputs
         enc_hidden, context = self.encoder(src, lengths)
-
         enc_init_state = self._combine_enc_state_img_proj(enc_hidden, img_proj)
+        #enc_state = self.decoder.init_decoder_state(src, context, enc_hidden)
         enc_state = self.decoder.init_decoder_state(src, context, enc_init_state)
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
-                                             else dec_state)
+                                             else dec_state,
+                                             context_lengths=lengths)
+
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
@@ -1058,11 +1062,13 @@ class NMTImgEModel(nn.Module):
     def _evaluate_is_tuple_hidden(self, src, lengths):
         # TODO: workaround to access the dimensions of the encoder hidden state.
         # do it without running the forward pass on the encoder!
-        enc_hidden, context = self.encoder(src, lengths)
-        if isinstance(enc_hidden, tuple):
-            ret = True
-        else:
-            ret = False
+        if self.is_tuple_hidden is None:
+            enc_hidden, context = self.encoder(src, lengths)
+            if isinstance(enc_hidden, tuple):
+                self.is_tuple_hidden = True
+            else:
+                self.is_tuple_hidden = False
+        ret = self.is_tuple_hidden
         return ret
 
     def forward(self, src, tgt, lengths, img_feats, dec_state=None):
@@ -1084,7 +1090,6 @@ class NMTImgEModel(nn.Module):
         # project image features
         img_proj = self.encoder_images(img_feats)
 
-        src = src
         tgt = tgt[:-1]  # exclude last target from inputs
 
         # create initial hidden state differently for GRU/LSTM
@@ -1097,7 +1102,8 @@ class NMTImgEModel(nn.Module):
         enc_state = self.decoder.init_decoder_state(src, context, enc_hidden)
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
-                                             else dec_state)
+                                             else dec_state,
+                                             context_lengths=lengths)
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
@@ -1143,13 +1149,13 @@ class NMTImgWModel(nn.Module):
         # project image features
         img_proj = self.encoder_images(img_feats)
 
-        src = src
         tgt = tgt[:-1]  # exclude last target from inputs
         enc_hidden, context = self.encoder(src, img_feats=img_proj, lengths=lengths)
         enc_state = self.decoder.init_decoder_state(src, context, enc_hidden)
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
-                                             else dec_state)
+                                             else dec_state,
+                                             context_lengths=lengths)
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None

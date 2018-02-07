@@ -271,6 +271,7 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         if model_opt.multimodal_model_type in ['imgd', 'imge']:
             encoder = make_encoder(model_opt, src_embeddings)
         elif  model_opt.multimodal_model_type == 'imgw':
+            # model ImgW uses a specific source-language encoder
             encoder = RNNEncoderImageAsWord(model_opt.rnn_type,
                     model_opt.brnn, model_opt.enc_layers,
                     model_opt.rnn_size, model_opt.dropout, src_embeddings)
@@ -310,8 +311,10 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
     if model_opt.multimodal_model_type == 'src+img':
         # use the local image features "as is"
         encoder_image = None
+        raise Exception("Multi-modal model type not yet implemented: %s."%(
+                model_opt.multimodal_model_type))
     else:
-        # transform global image features before using them with encoder_image
+        # transform global image features before using them
         encoder_image = make_encoder_image_global_features(model_opt)
 
     # Make NMTModel(= encoder + decoder).
@@ -323,12 +326,12 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         model = NMTImgEModel(encoder, decoder, encoder_image)
     elif model_opt.multimodal_model_type == 'imgw':
         model = NMTImgWModel(encoder, decoder, encoder_image)
-    elif model_opt.multimodal_model_type == 'src+img':
-        # not using image encoder to project local features
-        model = NMTSrcImgModel(encoder, decoder)
+        #elif model_opt.multimodal_model_type == 'src+img':
+        #    # not using image encoder to project local features
+        #    model = NMTSrcImgModel(encoder, decoder)
     else:
-        raise Exception("Multi-modal model type not implemented: %s"%
-                        opt.multimodal_model_type)
+        raise Exception("Multi-modal model type not yet implemented: %s"%(
+                        opt.multimodal_model_type))
 
     model.model_type = model_opt.model_type
 
@@ -350,7 +353,7 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         generator.load_state_dict(checkpoint['generator'])
     else:
         if model_opt.param_init != 0.0:
-            print('Intializing model parameters.')
+            print('Initializing model parameters.')
             for p in model.parameters():
                 p.data.uniform_(-model_opt.param_init, model_opt.param_init)
             for p in generator.parameters():
@@ -381,18 +384,18 @@ def make_encoder_image_global_features(opt):
         opt: the option in current environment.
     """
     # TODO: feat_size and num_layers only tested with vgg and resnet networks.
-    # validate that these values work for other architectures as well.
+    # Validate that these values work for other CNN architectures as well.
     if 'vgg' in opt.path_to_train_img_feats.lower():
         feat_size = 4096
     else:
         feat_size = 2048
+
     if opt.multimodal_model_type == 'imgw':
         num_layers = 2
     elif opt.multimodal_model_type == 'imge':
         num_layers = opt.enc_layers
     elif opt.multimodal_model_type == 'imgd':
         num_layers = opt.dec_layers
-    return ImageGlobalFeaturesProjector(num_layers, feat_size, opt.rnn_size, opt.dropout_imgs,
-            opt.use_nonlinear_projection)
-
+    return ImageGlobalFeaturesProjector(num_layers, feat_size, opt.rnn_size,
+            opt.dropout_imgs, opt.use_nonlinear_projection)
 

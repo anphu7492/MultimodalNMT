@@ -74,7 +74,10 @@ class TranslatorMultimodal(object):
         img_feats = torch.from_numpy( self.test_img_feats[sent_idx] )
         img_feats = torch.autograd.Variable(img_feats, requires_grad=False)
         img_feats = img_feats.unsqueeze(0)
-        #img_feats = img_feats.cuda()
+        if next(self.model.parameters()).is_cuda:
+            img_feats = img_feats.cuda()
+        else:
+            img_feats = img_feats.cpu()
 
         # project image features
         img_proj = self.model.encoder_images( img_feats )
@@ -141,6 +144,8 @@ class TranslatorMultimodal(object):
             #enc_states, context = self.model.encoder(src, src_lengths, img_proj)
             # use image features as words in the encoder
             enc_states, context = self.model.encoder(src, img_feats=img_proj, lengths=src_lengths)
+            # update the lengths variable with the new source lengths after incorporating image feats
+            src_lengths = self.model.encoder.updated_lengths
             # initialise decoder
             dec_states = self.model.decoder.init_decoder_state(src, context, enc_states)
         else:
@@ -244,7 +249,10 @@ class TranslatorMultimodal(object):
         img_feats = torch.from_numpy( self.test_img_feats[sent_idx] )
         img_feats = torch.autograd.Variable(img_feats, requires_grad=False)
         img_feats = img_feats.unsqueeze(0)
-        #img_feats = img_feats.cuda()
+        if next(self.model.parameters()).is_cuda:
+            img_feats = img_feats.cuda()
+        else:
+            img_feats = img_feats.cpu()
 
         # project image features
         img_proj = self.model.encoder_images( img_feats )
@@ -265,6 +273,8 @@ class TranslatorMultimodal(object):
             #enc_states, context = self.model.encoder(src, src_lengths, img_proj)
             # use image features as words in the encoder
             enc_states, context = self.model.encoder(src, img_feats=img_proj, lengths=src_lengths)
+            # update the lengths variable with the new source lengths after incorporating image feats
+            src_lengths = self.model.encoder.updated_lengths
             # initialise decoder
             dec_states = self.model.decoder.init_decoder_state(src, context, enc_states)
         else:
