@@ -18,9 +18,10 @@ from onmt.Utils import use_gpu
 
 # additional imports for multi-modal NMT
 from onmt.Models import ImageGlobalFeaturesProjector, \
+                        ImageLocalFeaturesProjector, \
                         StdRNNDecoderDoublyAttentive, \
                         NMTImgDModel, NMTImgEModel, NMTImgWModel, \
-                        RNNEncoderImageAsWord
+                        NMTSrcImgModel, RNNEncoderImageAsWord
 
 def make_embeddings(opt, word_dict, feature_dicts, for_encoder=True):
     """
@@ -268,7 +269,7 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         src_embeddings = make_embeddings(model_opt, src_dict,
                                          feature_dicts)
         #encoder = make_encoder(model_opt, src_embeddings)
-        if model_opt.multimodal_model_type in ['imgd', 'imge']:
+        if model_opt.multimodal_model_type in ['imgd', 'imge', 'src+img']:
             encoder = make_encoder(model_opt, src_embeddings)
         elif  model_opt.multimodal_model_type == 'imgw':
             # model ImgW uses a specific source-language encoder
@@ -277,7 +278,7 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
                     model_opt.rnn_size, model_opt.dropout, src_embeddings)
         else:
             raise Exception("Multi-modal model type not implemented: %s"%
-                            opt.multimodal_model_type)
+                            model_opt.multimodal_model_type)
     elif model_opt.model_type == "img":
         encoder = ImageEncoder(model_opt.enc_layers,
                                model_opt.brnn,
@@ -309,10 +310,8 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
     decoder = make_decoder(model_opt, tgt_embeddings)
 
     if model_opt.multimodal_model_type == 'src+img':
-        # use the local image features "as is"
-        encoder_image = None
-        raise Exception("Multi-modal model type not yet implemented: %s."%(
-                model_opt.multimodal_model_type))
+        # use the local image features "as is": encoder only reshapes them
+        encoder_image = make_encoder_image_local_features(model_opt)
     else:
         # transform global image features before using them
         encoder_image = make_encoder_image_global_features(model_opt)
@@ -326,9 +325,9 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         model = NMTImgEModel(encoder, decoder, encoder_image)
     elif model_opt.multimodal_model_type == 'imgw':
         model = NMTImgWModel(encoder, decoder, encoder_image)
-        #elif model_opt.multimodal_model_type == 'src+img':
-        #    # not using image encoder to project local features
-        #    model = NMTSrcImgModel(encoder, decoder)
+    elif model_opt.multimodal_model_type == 'src+img':
+        # using image encoder only to reshape local features
+        model = NMTSrcImgModel(encoder, decoder, encoder_image)
     else:
         raise Exception("Multi-modal model type not yet implemented: %s"%(
                         opt.multimodal_model_type))
@@ -397,5 +396,21 @@ def make_encoder_image_global_features(opt):
     elif opt.multimodal_model_type == 'imgd':
         num_layers = opt.dec_layers
     return ImageGlobalFeaturesProjector(num_layers, feat_size, opt.rnn_size,
+            opt.dropout_imgs, opt.use_nonlinear_projection)
+
+def make_encoder_image_local_features(opt):
+    """
+    Local image features encoder dispatcher function(s).
+    Args:
+        opt: the option in current environment.
+    """
+    # TODO: feat_size and num_layers only tested with vgg network.
+    # Validate that these values work for other CNN architectures as well.
+    if 'vgg' in opt.path_to_train_img_feats.lower():
+        feat_size = 512
+    else:
+        feat_size = 2048
+    num_layers = 1
+    return ImageLocalFeaturesProjector(num_layers, feat_size, opt.rnn_size,
             opt.dropout_imgs, opt.use_nonlinear_projection)
 

@@ -671,6 +671,58 @@ class ImageGlobalFeaturesProjector(nn.Module):
         return out
 
 
+class View(nn.Module):
+    """Helper class to be used inside Sequential object to reshape Variables"""
+    def __init__(self, *shape):
+        super(View, self).__init__()
+        self.shape = shape
+    def forward(self, input):
+        return input.view(*self.shape)
+
+
+class ImageLocalFeaturesProjector(nn.Module):
+    """
+        Reshape local image features.
+    """
+    def __init__(self, num_layers, nfeats, outdim, dropout,
+            use_nonlinear_projection):
+        """
+        Args:
+            num_layers (int): 1.
+            nfeats (int): size of image features.
+            outdim (int): size of the output dimension.
+            dropout (float): dropout probablity.
+            use_nonliner_projection (bool): use non-linear activation
+                    when projecting the image features or not.
+        """
+        super(ImageLocalFeaturesProjector, self).__init__()
+        assert(num_layers==1), \
+                'num_layers must be equal to 1 !'
+        self.num_layers = num_layers
+        self.nfeats = nfeats
+        self.dropout = dropout
+        
+        layers = []
+        # reshape input
+        layers.append( View(-1, 7*7, nfeats) )
+        # linear projection from feats to rnn size
+        layers.append( nn.Linear(nfeats, outdim*num_layers) )
+        if use_nonlinear_projection:
+            layers.append( nn.Tanh() )
+        layers.append( nn.Dropout(dropout) )
+        #self.batch_norm = nn.BatchNorm2d(512)
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, input):
+        out = self.layers(input)
+        #print "out.size(): ", out.size()
+        #if self.num_layers>1:
+        #    out = out.unsqueeze(0)
+        #    out = torch.cat([out[:,:,0:out.size(2):2], out[:,:,1:out.size(2):2]], 0)
+        #    #print "out.size(): ", out.size()
+        return out
+
+
 class RNNEncoderImageAsWord(EncoderBase):
     """ The RNN encoder that uses image features as words. """
     def __init__(self, rnn_type, bidirectional, num_layers,
@@ -733,11 +785,55 @@ class RNNEncoderImageAsWord(EncoderBase):
 
 class RNNDecoderBaseDoublyAttentive(nn.Module):
     """
-    RNN decoder base class for a decoder with two independent attention heads.
+    Base recurrent doubly-attentive-based decoder class.
+    Specifies the interface used by different decoder types
+    and required by :obj:`onmt.Models.NMTSrcImgModel`.
+
+
+    .. mermaid::
+
+       graph BT
+          A[Input]
+          subgraph RNN
+             C[Pos 1]
+             D[Pos 2]
+             E[Pos N]
+          end
+          G[Decoder State]
+          H[Decoder State]
+          I[Outputs]
+          F[Context]
+          A--emb-->C
+          A--emb-->D
+          A--emb-->E
+          H-->C
+          C-- attn --- F
+          D-- attn --- F
+          E-- attn --- F
+          C-->I
+          D-->I
+          E-->I
+          E-->G
+          F---I
+
+    Args:
+       rnn_type (:obj:`str`):
+          style of recurrent unit to use, one of [RNN, LSTM, GRU, SRU]
+       bidirectional_encoder (bool) : use with a bidirectional encoder
+       num_layers (int) : number of stacked layers
+       hidden_size (int) : hidden size of each layer
+       attn_type (str) : see :obj:`onmt.modules.GlobalAttention`
+       coverage_attn (str): see :obj:`onmt.modules.GlobalAttention`
+       context_gate (str): see :obj:`onmt.modules.ContextGate`
+       copy_attn (bool): setup a separate copy attention mechanism
+       dropout (float) : dropout value for :obj:`nn.Dropout`
+       embeddings (:obj:`onmt.modules.Embeddings`): embedding module to use
     """
     def __init__(self, rnn_type, bidirectional_encoder, num_layers,
-                 hidden_size, attn_type, coverage_attn, context_gate,
-                 copy_attn, dropout, embeddings):
+                 hidden_size, attn_type="general",
+                 coverage_attn=False, context_gate=None,
+                 copy_attn=False, dropout=0.0, embeddings=None,
+                 reuse_copy_attn=False):
         super(RNNDecoderBaseDoublyAttentive, self).__init__()
 
         # Basic attributes.
@@ -755,7 +851,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         # Set up the context gate.
         self.context_gate = None
         if context_gate is not None:
-            self.context_gate = onmt.modules.ContextGateFactory(
+            self.context_gate = onmt.modules.context_gate_factory(
                 context_gate, self._input_size,
                 hidden_size, hidden_size, hidden_size
             )
@@ -763,60 +859,70 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         # Set up the standard attention.
         self._coverage = coverage_attn
         self.attn = onmt.modules.GlobalAttention(
-            hidden_size,
-            coverage=coverage_attn,
+            hidden_size, coverage=coverage_attn,
             attn_type=attn_type
         )
-
-        # And another attention head over the image features
         self.attn_img = onmt.modules.GlobalAttention(
-            hidden_size,            # size of the decoder hidden state
-            coverage=coverage_attn, # True/False
-            attn_type=attn_type     # 'dot', 'general', 'mlp'
+            hidden_size,
+            coverage=False, # coverage not yet implemented for visual attention
+            attn_type=attn_type
         )
 
         # Set up a separated copy attention layer, if needed.
         self._copy = False
-        if copy_attn:
+        if copy_attn and not reuse_copy_attn:
             self.copy_attn = onmt.modules.GlobalAttention(
                 hidden_size, attn_type=attn_type
             )
+        if copy_attn:
             self._copy = True
+        self._reuse_copy_attn = reuse_copy_attn
 
-    def forward(self, input, context, context_img, state):
+    def forward(self, input, context, context_img, state, context_lengths=None):
         """
-        Forward through the decoder.
         Args:
-            input (LongTensor): a sequence of input tokens tensors
-                                of size (len x batch x nfeats).
-            context (FloatTensor): output(tensor sequence) from the encoder
-                        RNN of size (src_len x batch x hidden_size).
-            context_img (FloatTensor): output(tensor sequence) from a pretrained
-                        CNN of size (img_len x batch x hidden_size).
-            state (FloatTensor): hidden state from the encoder RNN for
-                                 initializing the decoder.
+            input (`LongTensor`): sequences of padded tokens
+                                `[tgt_len x batch x nfeats]`.
+            context (`FloatTensor`): vectors from the encoder
+                 `[src_len x batch x hidden]`.
+            context_img (`FloatTensor`): vectors from the image
+                 `[img_feats_len x batch x hidden]`.
+            state (:obj:`onmt.Models.DecoderState`):
+                 decoder state object to initialize the decoder
+            context_lengths (`LongTensor`): the padded source lengths
+                `[batch]`.
         Returns:
-            outputs (FloatTensor): a Tensor sequence of output from the decoder
-                                   of shape (len x batch x hidden_size).
-            state (FloatTensor): final hidden state from the decoder.
-            attns (dict of (str, FloatTensor)): a dictionary of different
-                                type of attention Tensor from the decoder
-                                of shape (src_len x batch).
+            (`FloatTensor`,:obj:`onmt.Models.DecoderState`,`FloatTensor`):
+                * outputs: output from the decoder
+                         `[tgt_len x batch x hidden]`.
+                * state: final hidden state from the decoder
+                * attns: distribution over src at each tgt
+                        `[tgt_len x batch x src_len]`.
         """
+        # transpose image feats from (batch x len x feats) to (len x batch x feats)
+        context_img = context_img.transpose(0,1)
+
         # Args Check
         assert isinstance(state, RNNDecoderStateDoublyAttentive)
         input_len, input_batch, _ = input.size()
         contxt_len, contxt_batch, _ = context.size()
+        contxt_img_len, contxt_img_batch, _ = context_img.size()
         aeq(input_batch, contxt_batch)
+        aeq(input_batch, contxt_img_batch)
         # END Args Check
 
         # Run the forward pass of the RNN.
-        hidden, outputs, outputs_img, attns, coverage = \
-            self._run_forward_pass(input, context, context_img, state)
+        #hidden, outputs, attns, coverage = self._run_forward_pass(
+        hidden, outputs, outputs_img, attns, coverage, coverage_img = \
+                self._run_forward_pass(input, context, context_img,
+                        state, context_lengths=context_lengths)
 
         # Update the state with the result.
         final_output = outputs[-1]
         final_output_img = outputs_img[-1]
+        #state.update_state(hidden, final_output.unsqueeze(0),
+        #                   coverage.unsqueeze(0)
+        #                   if coverage is not None else None)
         state.update_state(hidden,
                            final_output.unsqueeze(0),
                            final_output_img.unsqueeze(0),
@@ -843,26 +949,40 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         return h
 
     def init_decoder_state(self, src, context, context_img, enc_hidden):
-        if isinstance(enc_hidden, tuple):  # GRU
-            #print "enc_hidden is tuple! initialising decoder for GRU ..."
+        if isinstance(enc_hidden, tuple):  # LSTM
+            #return RNNDecoderState(context, self.hidden_size,
+            #                       tuple([self._fix_enc_hidden(enc_hidden[i])
+            #                             for i in range(len(enc_hidden))]))
             return RNNDecoderStateDoublyAttentive(context, context_img,
                                    self.hidden_size,
                                    tuple([self._fix_enc_hidden(enc_hidden[i])
                                          for i in range(len(enc_hidden))]))
-        else:  # LSTM
-            #print "enc_hidden is NOT a tuple! initialising decoder for LSTM ..."
+        else:  # GRU
+            #return RNNDecoderState(context, self.hidden_size,
+            #                       self._fix_enc_hidden(enc_hidden))
             return RNNDecoderStateDoublyAttentive(context, context_img,
                                    self.hidden_size,
                                    self._fix_enc_hidden(enc_hidden))
 
 
+
 class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
     """
-    Stardard doubly-attentive RNN decoder, with two independent
-    Attention heads.
-    Currently no 'coverage_attn' and 'copy_attn' support.
+    Standard fully batched RNN decoder with two attention heads.
+    Faster implementation, uses CuDNN for implementation.
+    See :obj:`RNNDecoderBase` for options.
+
+
+    Based around the approach from
+    "Neural Machine Translation By Jointly Learning To Align and Translate"
+    :cite:`Bahdanau2015`
+
+
+    Implemented without input_feeding and currently with no `coverage_attn`
+    or `copy_attn` support.
     """
-    def _run_forward_pass(self, input, context, context_img, state):
+    def _run_forward_pass(self, input, context, context_img, state,
+            context_lengths=None):
         """
         Private helper for running the specific RNN forward pass.
         Must be overriden by all subclasses.
@@ -871,12 +991,17 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
                                 of size (len x batch x nfeats).
             context (FloatTensor): output(tensor sequence) from the encoder
                         RNN of size (src_len x batch x hidden_size).
+            context_img (FloatTensor): output(tensor sequence) from the pretrained
+                        CNN of size (img_feats_len x batch x hidden_size).
             state (FloatTensor): hidden state from the encoder RNN for
                                  initializing the decoder.
+            context_lengths (LongTensor): the source context lengths.
         Returns:
             hidden (Variable): final hidden state from the decoder.
-            outputs ([FloatTensor]): an array of output of every time
-                                     step from the decoder.
+            outputs ([FloatTensor]): an array of outputs (source-language)
+                                     of every time step from the decoder.
+            outputs_img ([FloatTensor]): an array of outputs (image features)
+                                         of every time step from the decoder.
             attns (dict of (str, [FloatTensor]): a dictionary of different
                             type of attention Tensor array of every time
                             step from the decoder.
@@ -887,8 +1012,10 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
 
         # Initialize local and return variables.
         outputs = []
-        attns = {"std": []}
+        outputs_img = []
+        attns = {"std": [], "std_img": []}
         coverage = None
+        coverage_img = None
 
         emb = self.embeddings(input)
 
@@ -907,14 +1034,15 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         # Calculate the attention.
         attn_outputs, attn_scores = self.attn(
             rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
-            context.transpose(0, 1)                   # (contxt_len, batch, d)
-        )
-        # Calculate the visual attention.
-        attn_img_outputs, attn_img_scores = self.attn_img(
-            rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
-            context_img.transpose(0, 1)               # (contxt_len, batch, d)
+            context.transpose(0, 1),                  # (contxt_len, batch, d)
+            context_lengths=context_lengths
         )
         attns["std"] = attn_scores
+        attn_img_outputs, attn_img_scores = self.attn_img(
+            rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
+            context_img.transpose(0, 1),              # (contxt_img_len, batch, d)
+            context_lengths=None
+        )
         attns["std_img"] = attn_img_scores
 
         # Calculate the context gate.
@@ -929,11 +1057,11 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         else:
             outputs = self.dropout(attn_outputs)    # (input_len, batch, d)
 
-        # no context gate applied to image attention
+        # no context gate on image attention
         outputs_img = self.dropout(attn_img_outputs)
 
         # Return result.
-        return hidden, outputs, outputs_img, attns, coverage, coverage
+        return hidden, outputs, outputs_img, attns, coverage, coverage_img
 
     def _build_rnn(self, rnn_type, input_size,
                    hidden_size, num_layers, dropout):
@@ -958,6 +1086,130 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         Private helper returning the number of expected features.
         """
         return self.embeddings.embedding_size
+
+
+class InputFeedRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
+    """
+    Input feeding based decoder. See :obj:`RNNDecoderBase` for options.
+
+    Based around the input feeding approach from
+    "Effective Approaches to Attention-based Neural Machine Translation"
+    :cite:`Luong2015`
+
+
+    .. mermaid::
+
+       graph BT
+          A[Input n-1]
+          AB[Input n]
+          subgraph RNN
+            E[Pos n-1]
+            F[Pos n]
+            E --> F
+          end
+          G[Encoder]
+          H[Context n-1]
+          A --> E
+          AB --> F
+          E --> H
+          G --> H
+    """
+
+    def _run_forward_pass(self, input, context, context_img, state, context_lengths=None):
+        """
+        See StdRNNDecoder._run_forward_pass() for description
+        of arguments and return values.
+        """
+        # Additional args check.
+        output = state.input_feed.squeeze(0)
+        output_batch, _ = output.size()
+        input_len, input_batch, _ = input.size()
+        aeq(input_batch, output_batch)
+        # END Additional args check.
+
+        # Initialize local and return variables.
+        outputs = []
+        outputs_img = []
+        attns = {"std": [], "std_img": []}
+        if self._copy:
+            attns["copy"] = []
+        if self._coverage:
+            attns["coverage"] = []
+
+        emb = self.embeddings(input)
+        assert emb.dim() == 3  # len x batch x embedding_dim
+
+        hidden = state.hidden
+        coverage = state.coverage.squeeze(0) \
+            if state.coverage is not None else None
+        # npt using coverage in visual attention
+        coverage_img = None
+
+        # Input feed concatenates hidden state with
+        # input at every time step.
+        for i, emb_t in enumerate(emb.split(1)):
+            emb_t = emb_t.squeeze(0)
+            emb_t = torch.cat([emb_t, output], 1)
+
+            rnn_output, hidden = self.rnn(emb_t, hidden)
+            attn_output, attn = self.attn(
+                rnn_output,
+                context.transpose(0, 1),
+                context_lengths=context_lengths)
+            attn_output_img, attn_img = self.attn_img(
+                rnn_output,
+                context_img.transpose(0, 1),
+                context_lengths=None)
+            if self.context_gate is not None:
+                # TODO: context gate should be employed
+                # instead of second RNN transform.
+                output = self.context_gate(
+                    emb_t, rnn_output, attn_output
+                )
+                output = self.dropout(output)
+            else:
+                output = self.dropout(attn_output)
+            output_img = self.dropout(attn_output_img)
+            outputs += [output]
+            outputs_img += [output_img]
+            attns["std"] += [attn]
+            attns["std_img"] += [attn_img]
+
+            # Update the coverage attention.
+            if self._coverage:
+                coverage = coverage + attn \
+                    if coverage is not None else attn
+                attns["coverage"] += [coverage]
+
+            # Run the forward pass of the copy attention layer.
+            if self._copy and not self._reuse_copy_attn:
+                _, copy_attn = self.copy_attn(output,
+                                              context.transpose(0, 1))
+                attns["copy"] += [copy_attn]
+            elif self._copy:
+                attns["copy"] = attns["std"]
+        # Return result.
+        return hidden, outputs, outputs_img, attns, coverage, coverage_img
+
+    def _build_rnn(self, rnn_type, input_size,
+                   hidden_size, num_layers, dropout):
+        assert not rnn_type == "SRU", "SRU doesn't support input feed! " \
+                "Please set -input_feed 0!"
+        if rnn_type == "LSTM":
+            stacked_cell = onmt.modules.StackedLSTM
+        else:
+            stacked_cell = onmt.modules.StackedGRU
+        return stacked_cell(num_layers, input_size,
+                            hidden_size, dropout)
+
+    @property
+    def _input_size(self):
+        """
+        Using input feed by concatenating input with attention vectors.
+        """
+        return self.embeddings.embedding_size + self.hidden_size
+
+
 
 
 class NMTImgDModel(nn.Module):
@@ -1161,6 +1413,62 @@ class NMTImgWModel(nn.Module):
             dec_state = None
             attns = None
         return out, attns, dec_state
+
+
+class NMTSrcImgModel(nn.Module):
+    """
+    Core trainable object in OpenNMT. Implements a trainable interface
+    for a doubly-attentive encoder + decoder model.
+
+    Args:
+      encoder (:obj:`EncoderBase`): an encoder object
+      decoder (:obj:`RNNDecoderBase`): a decoder object
+      multi<gpu (bool): setup for multigpu support
+    """
+    def __init__(self, encoder, decoder, encoder_images, multigpu=False):
+        self.multigpu = multigpu
+        super(NMTSrcImgModel, self).__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.encoder_images = encoder_images
+
+    def forward(self, src, tgt, lengths, img_feats, dec_state=None):
+        """Forward propagate a `src`, `img_feats` and `tgt` tuple for training.
+        Possible initialized with a beginning decoder state.
+
+        Args:
+            src (:obj:`Tensor`):
+                a source sequence passed to encoder.
+                typically for inputs this will be a padded :obj:`LongTensor`
+                of size `[len x batch x features]`. however, may be an
+                image or other generic input depending on encoder.
+            tgt (:obj:`LongTensor`):
+                 a target sequence of size `[tgt_len x batch]`.
+            lengths(:obj:`LongTensor`): the src lengths, pre-padding `[batch]`.
+            img_feats(FloatTensor): image features of size (len x batch x nfeats).
+            dec_state (:obj:`DecoderState`, optional): initial decoder state
+        Returns:
+            (:obj:`FloatTensor`, `dict`, :obj:`onmt.Models.DecoderState`):
+
+                 * decoder output `[tgt_len x batch x hidden]`
+                 * dictionary attention dists of `[tgt_len x batch x src_len]`
+                 * final decoder state
+        """
+        tgt = tgt[:-1]  # exclude last target from inputs
+        enc_hidden, context = self.encoder(src, lengths)
+
+        # project/transform local image features into the expected structure/shape
+        img_proj = self.encoder_images( img_feats )
+        enc_state = self.decoder.init_decoder_state(src, context, img_proj, enc_hidden)
+        out, out_imgs, dec_state, attns = self.decoder(tgt, context, img_proj,
+                                                       enc_state if dec_state is None
+                                                       else dec_state,
+                                                       context_lengths=lengths)
+        if self.multigpu:
+            # Not yet supported on multi-gpu
+            dec_state = None
+            attns = None
+        return out, out_imgs, attns, dec_state
 
 
 class RNNDecoderStateDoublyAttentive(DecoderState):

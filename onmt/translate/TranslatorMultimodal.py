@@ -148,6 +148,12 @@ class TranslatorMultimodal(object):
             src_lengths = self.model.encoder.updated_lengths
             # initialise decoder
             dec_states = self.model.decoder.init_decoder_state(src, context, enc_states)
+        elif self.multimodal_model_type == 'src+img':
+            # traditional encoder
+            enc_states, context = self.model.encoder(src, src_lengths)
+            # initialise decoder
+            dec_states = self.model.decoder.init_decoder_state(src,
+                    context, img_proj, enc_states)
         else:
             raise Exception("Multi-modal model not implemented: %s"%self.multimodal_model_type)
 
@@ -155,6 +161,11 @@ class TranslatorMultimodal(object):
         src_map = rvar(batch.src_map.data) \
             if data_type == 'text' and self.copy_attn else None
         context = rvar(context.data)
+        # image features are in (batch x len x feats),
+        # but rvar() function expects (len x batch x feats)
+        img_proj = rvar(img_proj.transpose(0,1).data)
+        # return it back to (batch x len x feats)
+        img_proj = img_proj.transpose(0,1)
         context_lengths = src_lengths.repeat(beam_size)
         dec_states.repeat_beam_size_times(beam_size)
 
@@ -179,8 +190,17 @@ class TranslatorMultimodal(object):
             inp = inp.unsqueeze(2)
 
             # Run one step.
-            dec_out, dec_states, attn = self.model.decoder(
-                inp, context, dec_states, context_lengths=context_lengths)
+            if self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
+                dec_out, dec_states, attn = self.model.decoder(
+                    inp, context, dec_states, context_lengths=context_lengths)
+            elif self.multimodal_model_type == 'src+img':
+                dec_out, dec_out_imgs, dec_states, attn = self.model.decoder(
+                        inp, context, img_proj, dec_states,
+                        context_lengths=context_lengths)
+            else:
+                raise Exception("Multi-modal model type not implemented: %s"%(
+                    self.multimodal_model_type))
+
             dec_out = dec_out.squeeze(0)
             # dec_out: beam x rnn_size
 
@@ -277,6 +297,12 @@ class TranslatorMultimodal(object):
             src_lengths = self.model.encoder.updated_lengths
             # initialise decoder
             dec_states = self.model.decoder.init_decoder_state(src, context, enc_states)
+        elif self.multimodal_model_type == 'src+img':
+            # traditional encoder
+            enc_states, context = self.model.encoder(src, src_lengths)
+            # initialise decoder
+            dec_states = self.model.decoder.init_decoder_state(src,
+                    context, img_proj, enc_states)
         else:
             raise Exception("Multi-modal model not implemented: %s"%self.multimodal_model_type)
 
@@ -285,8 +311,16 @@ class TranslatorMultimodal(object):
         #  (i.e. log likelihood) of the target under the model
         tt = torch.cuda if self.cuda else torch
         gold_scores = tt.FloatTensor(batch.batch_size).fill_(0)
-        dec_out, dec_states, attn = self.model.decoder(
-            tgt_in, context, dec_states, context_lengths=src_lengths)
+        if self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
+            dec_out, dec_states, attn = self.model.decoder(
+                tgt_in, context, dec_states, context_lengths=src_lengths)
+        elif self.multimodal_model_type == 'src+img':
+            dec_out, dec_out_imgs, dec_states, attn = self.model.decoder(
+                    tgt_in, context, img_proj, dec_states,
+                    context_lengths=src_lengths)
+        else:
+            raise Exception("Multi-modal odel type not implemented: %s"%(
+                self.multimodal_model_type))
 
         tgt_pad = self.fields["tgt"].vocab.stoi[onmt.io.PAD_WORD]
         for dec, tgt in zip(dec_out, batch.tgt[1:].data):

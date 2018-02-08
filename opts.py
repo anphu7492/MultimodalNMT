@@ -56,10 +56,10 @@ def model_opts(parser):
                        are experimental. Options are
                        [rnn|brnn|mean|transformer|cnn].""")
     group.add_argument('-decoder_type', type=str, default='rnn',
-                       choices=['rnn', 'transformer', 'cnn'],
+                       choices=['rnn', 'transformer', 'cnn', 'doubly-attentive-rnn'],
                        help="""Type of decoder layer to use. Non-RNN layers
                        are experimental. Options are
-                       [rnn|transformer|cnn].""")
+                       [rnn|transformer|cnn|doubly-attentive-rnn].""")
 
     group.add_argument('-layers', type=int, default=-1,
                        help='Number of layers in enc/dec.')
@@ -462,9 +462,9 @@ def train_mm_opts(parser):
     parser.add_argument('--multimodal_model_type', required=True, type=str,
                         choices=['imgd', 'imge', 'imgw', 'src+img'],
                         help="""Multi-modal NMT model type.""")
-    parser.add_argument('-multimodal_decoder_type', type=str, default='doubly-attentive-rnn',
-                        choices=['doubly-attentive-rnn'],
-                        help='Type of multimodal decoder layer to use.')
+    #parser.add_argument('-multimodal_decoder_type', type=str, default='doubly-attentive-rnn',
+    #                    choices=['doubly-attentive-rnn'],
+    #                    help='Type of multimodal decoder layer to use.')
 
 def translate_mm_opts(parser):
     parser.add_argument('-path_to_test_img_feats', required=True,

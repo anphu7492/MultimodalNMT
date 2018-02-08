@@ -170,7 +170,7 @@ class TrainerMultimodal(object):
                 img_feats = img_feats.cpu()
 
             # F-prop through the model.
-            outputs, attns, _ = self.model(src, tgt, src_lengths, img_feats)
+            outputs, outputs_img, attns, _ = self.model(src, tgt, src_lengths, img_feats)
 
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
@@ -260,7 +260,7 @@ class TrainerMultimodal(object):
                 # 2. F-prop all but generator.
                 if self.grad_accum_count == 1:
                     self.model.zero_grad()
-                outputs, attns, dec_state = \
+                outputs, outputs_img, attns, dec_state = \
                     self.model(src, tgt, src_lengths, img_feats, dec_state)
 
                 # 3. Compute loss in shards for memory efficiency.

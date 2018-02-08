@@ -20,6 +20,7 @@ import onmt.modules
 from onmt.Utils import use_gpu
 import opts
 import tables
+import numpy
 
 parser = argparse.ArgumentParser(
     description='train_mm.py',

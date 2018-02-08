@@ -62,6 +62,7 @@ def get_cnn_features(image_list, split, batch_size, dataset_name, pretrained_cnn
         # i.e., condense the list of image input variables into a mini-batch
         input_imgs_minibatch = torch.cat( batch_list, dim=0 )
         input_imgs_minibatch = input_imgs_minibatch.cuda()
+        #print "input_imgs_minibatch.size(): ", input_imgs_minibatch.size()
 
         # forward pass using pre-trained CNN, twice for each minibatch
         lfeats = pretrained_cnn.get_local_features(input_imgs_minibatch)
