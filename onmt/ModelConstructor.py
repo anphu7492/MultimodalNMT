@@ -20,6 +20,7 @@ from onmt.Utils import use_gpu
 from onmt.Models import ImageGlobalFeaturesProjector, \
                         ImageLocalFeaturesProjector, \
                         StdRNNDecoderDoublyAttentive, \
+                        InputFeedRNNDecoderDoublyAttentive, \
                         NMTImgDModel, NMTImgEModel, NMTImgWModel, \
                         NMTSrcImgModel, RNNEncoderImageAsWord
 
@@ -95,7 +96,7 @@ def make_decoder(opt, embeddings):
                           opt.global_attention, opt.copy_attn,
                           opt.cnn_kernel_width, opt.dropout,
                           embeddings)
-    elif opt.decoder_type == "doubly-attentive-rnn":
+    elif opt.decoder_type == "doubly-attentive-rnn" and not opt.input_feed:
         return StdRNNDecoderDoublyAttentive(opt.rnn_type,
                              opt.brnn,
                              opt.dec_layers, opt.rnn_size,
@@ -105,6 +106,16 @@ def make_decoder(opt, embeddings):
                              opt.copy_attn,
                              opt.dropout,
                              embeddings)
+    elif opt.decoder_type == "doubly-attentive-rnn" and opt.input_feed:
+        return InputFeedRNNDecoderDoublyAttentive(opt.rnn_type, opt.brnn,
+                                   opt.dec_layers, opt.rnn_size,
+                                   opt.global_attention,
+                                   opt.coverage_attn,
+                                   opt.context_gate,
+                                   opt.copy_attn,
+                                   opt.dropout,
+                                   embeddings,
+                                   opt.reuse_copy_attn)
     elif opt.input_feed:
         return InputFeedRNNDecoder(opt.rnn_type, opt.brnn,
                                    opt.dec_layers, opt.rnn_size,
