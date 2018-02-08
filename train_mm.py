@@ -224,12 +224,13 @@ def train_model(model, fields, optim, data_type,
     shard_size = opt.max_generator_batches
     norm_method = opt.normalization
     grad_accum_count = opt.accum_count
+    multimodal_model_type = opt.multimodal_model_type
 
     trainer = onmt.TrainerMultimodal(model,
                            train_loss, valid_loss,
                            optim, trunc_size, shard_size, data_type,
                            norm_method, grad_accum_count,
-                           train_img_feats, valid_img_feats)
+                           train_img_feats, valid_img_feats, multimodal_model_type)
 
     print('\nStart training...')
     print(' * number of epochs: %d, starting from Epoch %d' %

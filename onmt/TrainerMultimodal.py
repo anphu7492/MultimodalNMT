@@ -47,7 +47,8 @@ class TrainerMultimodal(object):
     def __init__(self, model, train_loss, valid_loss, optim,
                  trunc_size=0, shard_size=32, data_type='text',
                  norm_method="sents", grad_accum_count=1,
-                 train_img_feats=None, valid_img_feats=None):
+                 train_img_feats=None, valid_img_feats=None,
+                 multimodal_model_type=None):
         # Basic attributes.
         self.model = model
         self.train_loss = train_loss
@@ -60,11 +61,14 @@ class TrainerMultimodal(object):
         self.grad_accum_count = grad_accum_count
         self.train_img_feats = train_img_feats
         self.valid_img_feats = valid_img_feats
+        self.multimodal_model_type = multimodal_model_type
 
         assert(not self.train_img_feats is None), \
                 'Must provide training image features!'
         assert(not self.valid_img_feats is None), \
                 'Must provide validation image features!'
+        assert(self.multimodal_model_type in ['imgw', 'imge', 'imgd', 'src+img']), \
+                'Invalid multimodal model type: %s!'%(self.multimodal_model_type)
 
         assert(grad_accum_count > 0)
         if grad_accum_count > 1:
@@ -170,7 +174,13 @@ class TrainerMultimodal(object):
                 img_feats = img_feats.cpu()
 
             # F-prop through the model.
-            outputs, outputs_img, attns, _ = self.model(src, tgt, src_lengths, img_feats)
+            if self.multimodal_model_type == 'src+img':
+                outputs, outputs_img, attns, _ = self.model(src, tgt, src_lengths, img_feats)
+            elif self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
+                outputs, attns, _ = self.model(src, tgt, src_lengths, img_feats)
+            else:
+                raise Exception("Multimodal model type not yet supported: %s"%(
+                        self.multimodal_model_type))
 
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
@@ -260,8 +270,15 @@ class TrainerMultimodal(object):
                 # 2. F-prop all but generator.
                 if self.grad_accum_count == 1:
                     self.model.zero_grad()
-                outputs, outputs_img, attns, dec_state = \
-                    self.model(src, tgt, src_lengths, img_feats, dec_state)
+                if self.multimodal_model_type == 'src+img':
+                    outputs, outputs_img, attns, dec_state = \
+                        self.model(src, tgt, src_lengths, img_feats, dec_state)
+                elif self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
+                    outputs, attns, dec_state = \
+                        self.model(src, tgt, src_lengths, img_feats, dec_state)
+                else:
+                    raise Exception("Multimodal model type not yet supported: %s"%(
+                            self.multimodal_model_type))
 
                 # 3. Compute loss in shards for memory efficiency.
                 batch_stats = self.train_loss.sharded_compute_loss(
