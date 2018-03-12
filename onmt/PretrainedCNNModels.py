@@ -31,7 +31,7 @@ class PretrainedCNN(object):
         # in the case of a resnet152, it will be a [1, 2048] tensor
         self.model.last_linear = pretrainedmodels.utils.Identity()
         elapsed = time.time() - start
-        print "Built pre-trained CNN %s in %d seconds."%(image_model_name, elapsed)
+        print("Built pre-trained CNN %s in %d seconds."%(image_model_name, elapsed))
 
     def load_image_from_path(self, path_img):
         """ Load an image given its full path in disk into a tensor
@@ -57,7 +57,8 @@ class PretrainedCNN(object):
         """ Returns features before the application of the first pooling/fully-connected layer.
             In the case of a ResNet, it will be a [1, 2048, 7, 7] tensor."""
         if self.pretrained_cnn.startswith('vgg'):
-            feats = self.model.local_features(input)
+            #feats = self.model.local_features(input)
+            feats = self.model._features(input)
         else:
             feats = self.model.features(input)
         return feats

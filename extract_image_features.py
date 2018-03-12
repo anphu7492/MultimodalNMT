@@ -67,13 +67,13 @@ def get_cnn_features(image_list, split, batch_size, dataset_name, pretrained_cnn
         # forward pass using pre-trained CNN, twice for each minibatch
         lfeats = pretrained_cnn.get_local_features(input_imgs_minibatch)
         gfeats = pretrained_cnn.get_global_features(input_imgs_minibatch)
-        #print "lfeats.size(): ", lfeats.size()
+        #print("lfeats.size(): ", lfeats.size())
         #print "gfeats.size(): ", gfeats.size()
 
         # transpose and flatten feats to prepare for reshape
-        lfeats = np.array(map(lambda x: x.T.flatten(), lfeats.data.cpu().numpy()))
+        lfeats = np.array(list(map(lambda x: x.T.flatten(), lfeats.data.cpu().numpy())))
         # flatten feature vector
-        gfeats = np.array(map(lambda x: x.flatten(), gfeats.data.cpu().numpy()))
+        gfeats = np.array(list(map(lambda x: x.flatten(), gfeats.data.cpu().numpy())))
         local_features_storage.append(lfeats)
         global_features_storage.append(gfeats)
 
@@ -126,7 +126,7 @@ def make_dataset(args):
         files = data[split]['files']
         get_cnn_features(files, split, args.batch_size, args.dataset_name, cnn, args.pretrained_cnn)
 
-    print "Finished!"
+    print("Finished!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
