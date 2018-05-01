@@ -150,11 +150,11 @@ def load_test_model(opt, dummy_opt):
             model_opt.__dict__[arg] = dummy_opt[arg]
 
     if 'multimodal_model_type' in opt:
-        print 'Building multi-modal model...'
+        print( 'Building multi-modal model...' )
         model = make_base_model_mmt(model_opt, fields,
                                     use_gpu(opt), checkpoint)
     else:
-        print 'Building text-only model...'
+        print( 'Building text-only model...' )
         model = make_base_model(model_opt, fields,
                                 use_gpu(opt), checkpoint)
     model.eval()

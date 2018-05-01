@@ -422,7 +422,7 @@ def main():
     # (All datasets have the same data_type).
     first_dataset = next(lazily_load_dataset("train"))
     data_type = first_dataset.data_type
-    print "data_type: ",data_type
+    print("data_type: ",data_type)
 
     # Load fields generated from preprocess phase.
     fields = load_fields(first_dataset, data_type, checkpoint)
