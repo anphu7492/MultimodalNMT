@@ -18,7 +18,7 @@ import onmt.Models
 import onmt.ModelConstructor
 import onmt.modules
 from onmt.Utils import use_gpu
-import opts
+import onmt.opts
 import tables
 import numpy
 
@@ -27,11 +27,11 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 # opts.py
-opts.add_md_help_argument(parser)
-opts.model_opts(parser)
-opts.train_opts(parser)
+onmt.opts.add_md_help_argument(parser)
+onmt.opts.model_opts(parser)
+onmt.opts.train_opts(parser)
 # multi-modal NMT parameters
-opts.train_mm_opts(parser)
+onmt.opts.train_mm_opts(parser)
 
 opt = parser.parse_args()
 if opt.word_vec_size != -1:

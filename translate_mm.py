@@ -14,15 +14,15 @@ import onmt.translate
 import onmt
 import onmt.ModelConstructor
 import onmt.modules
-import opts
+import onmt.opts
 import tables
 
 parser = argparse.ArgumentParser(
     description='translate_mm.py',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-opts.add_md_help_argument(parser)
-opts.translate_opts(parser)
-opts.translate_mm_opts(parser)
+onmt.opts.add_md_help_argument(parser)
+onmt.opts.translate_opts(parser)
+onmt.opts.translate_mm_opts(parser)
 
 opt = parser.parse_args()
 
@@ -52,7 +52,7 @@ def _report_rouge():
 
 def main():
     dummy_parser = argparse.ArgumentParser(description='train_mm.py')
-    opts.model_opts(dummy_parser)
+    onmt.opts.model_opts(dummy_parser)
     dummy_opt = dummy_parser.parse_known_args([])[0]
 
     opt.cuda = opt.gpu > -1
