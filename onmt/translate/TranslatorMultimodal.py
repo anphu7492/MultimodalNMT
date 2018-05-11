@@ -231,7 +231,7 @@ class TranslatorMultimodal(object):
         ret = self._from_beam(beam)
         ret["gold_score"] = [0] * batch_size
         if "tgt" in batch.__dict__:
-            ret["gold_score"] = self._run_target(batch, data)
+            ret["gold_score"] = self._run_target(batch, data, send_idx)
         ret["batch"] = batch
         return ret
 

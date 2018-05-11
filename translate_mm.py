@@ -66,7 +66,7 @@ def main():
     del checkpoint
 
     if opt.batch_size > 1:
-        print "Batch size > 1 not implemented! Falling back to batch_size = 1 ..."
+        print("Batch size > 1 not implemented! Falling back to batch_size = 1 ...")
         opt.batch_size = 1
 
     # load test image features
