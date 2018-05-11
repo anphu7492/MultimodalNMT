@@ -7,6 +7,7 @@ import glob
 import os
 import sys
 import random
+from datetime import datetime
 
 import torch
 import torch.nn as nn
@@ -20,13 +21,12 @@ import onmt.modules
 from onmt.Utils import use_gpu
 import onmt.opts
 import tables
-import numpy
 
 parser = argparse.ArgumentParser(
     description='train_mm.py',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-# opts.py
+# onmt.opts.py
 onmt.opts.add_md_help_argument(parser)
 onmt.opts.model_opts(parser)
 onmt.opts.train_opts(parser)
@@ -87,8 +87,16 @@ if opt.exp_host != "":
         cc.remove_experiment(opt.exp)
     experiment = cc.create_experiment(opt.exp)
 
+if opt.tensorboard:
+    from tensorboardX import SummaryWriter
+    writer = SummaryWriter(
+        opt.tensorboard_log_dir + datetime.now().strftime("/%b-%d_%H-%M-%S"),
+        comment="Onmt")
 
-def report_func(epoch, batch, num_batches,
+progress_step = 0
+
+
+def report_func(epoch, batch, num_batches, progress_step,
                 start_time, lr, report_stats):
     """
     This is the user-defined batch-level traing progress
@@ -98,6 +106,7 @@ def report_func(epoch, batch, num_batches,
         epoch(int): current epoch count.
         batch(int): current batch count.
         num_batches(int): total number of batches.
+        progress_step(int): the progress step.
         start_time(float): last report time.
         lr(float): current learning rate.
         report_stats(Statistics): old Statistics instance.
@@ -108,6 +117,10 @@ def report_func(epoch, batch, num_batches,
         report_stats.output(epoch, batch + 1, num_batches, start_time)
         if opt.exp_host:
             report_stats.log("progress", experiment, lr)
+        if opt.tensorboard:
+            # Log the progress using the number of batches on the x-axis.
+            report_stats.log_tensorboard(
+                "progress", writer, lr, progress_step)
         report_stats = onmt.Statistics()
 
     return report_stats
@@ -185,8 +198,23 @@ def make_dataset_iter(datasets, fields, opt, is_train=True):
     batch_size = opt.batch_size if is_train else opt.valid_batch_size
     batch_size_fn = None
     if is_train and opt.batch_type == "tokens":
+        # In token batching scheme, the number of sequences is limited
+        # such that the total number of src/tgt tokens (including padding)
+        # in a batch <= batch_size
         def batch_size_fn(new, count, sofar):
-            return sofar + max(len(new.tgt), len(new.src)) + 1
+            # Maintains the longest src and tgt length in the current batch
+            global max_src_in_batch, max_tgt_in_batch
+            # Reset current longest length at a new batch (count=1)
+            if count == 1:
+                max_src_in_batch = 0
+                max_tgt_in_batch = 0
+            # Src: <bos> w1 ... wN <eos>
+            max_src_in_batch = max(max_src_in_batch, len(new.src) + 2)
+            # Tgt: w1 ... wN <eos>
+            max_tgt_in_batch = max(max_tgt_in_batch, len(new.tgt) + 1)
+            src_elements = count * max_src_in_batch
+            tgt_elements = count * max_tgt_in_batch
+            return max(src_elements, tgt_elements)
 
     device = opt.gpuid[0] if opt.gpuid else -1
 
@@ -194,7 +222,7 @@ def make_dataset_iter(datasets, fields, opt, is_train=True):
                            device, is_train)
 
 
-def make_loss_compute(model, tgt_vocab, opt):
+def make_loss_compute(model, tgt_vocab, opt, train=True):
     """
     This returns user-defined LossCompute object, which is used to
     compute loss in train/validate process. You can implement your
@@ -202,11 +230,12 @@ def make_loss_compute(model, tgt_vocab, opt):
     """
     if opt.copy_attn:
         compute = onmt.modules.CopyGeneratorLossCompute(
-            model.generator, tgt_vocab, opt.copy_attn_force)
+            model.generator, tgt_vocab, opt.copy_attn_force,
+            opt.copy_loss_by_seqlength)
     else:
         compute = onmt.Loss.NMTLossCompute(
             model.generator, tgt_vocab,
-            label_smoothing=opt.label_smoothing)
+            label_smoothing=opt.label_smoothing if train else 0.0)
 
     if use_gpu(opt):
         compute.cuda()
@@ -218,7 +247,8 @@ def train_model(model, fields, optim, data_type,
                 train_img_feats, valid_img_feats,
                 model_opt):
     train_loss = make_loss_compute(model, fields["tgt"].vocab, opt)
-    valid_loss = make_loss_compute(model, fields["tgt"].vocab, opt)
+    valid_loss = make_loss_compute(model, fields["tgt"].vocab, opt,
+                                   train=False)
 
     trunc_size = opt.truncated_decoder  # Badly named...
     shard_size = opt.max_generator_batches
@@ -259,6 +289,9 @@ def train_model(model, fields, optim, data_type,
         if opt.exp_host:
             train_stats.log("train", experiment, optim.lr)
             valid_stats.log("valid", experiment, optim.lr)
+        if opt.tensorboard:
+            train_stats.log_tensorboard("train", writer, optim.lr, epoch)
+            train_stats.log_tensorboard("valid", writer, optim.lr, epoch)
 
         # 4. Update the learning rate
         trainer.epoch_step(valid_stats.ppl(), epoch)
@@ -364,11 +397,17 @@ def build_model(model_opt, opt, fields, checkpoint):
 
 
 def build_optim(model, checkpoint):
+    saved_optimizer_state_dict = None
+
     if opt.train_from:
         print('Loading optimizer from checkpoint.')
         optim = checkpoint['optim']
-        optim.optimizer.load_state_dict(
-            checkpoint['optim'].optimizer.state_dict())
+        # We need to save a copy of optim.optimizer.state_dict() for setting
+        # the, optimizer state later on in Stage 2 in this method, since
+        # the method optim.set_parameters(model.parameters()) will overwrite
+        # optim.optimizer, and with ith the values stored in
+        # optim.optimizer.state_dict()
+        saved_optimizer_state_dict = optim.optimizer.state_dict()
     else:
         print('Making optimizer for training.')
         optim = onmt.Optim(
@@ -382,9 +421,62 @@ def build_optim(model, checkpoint):
             warmup_steps=opt.warmup_steps,
             model_size=opt.rnn_size)
 
-    optim.set_parameters(model.parameters())
+    # Stage 1:
+    # Essentially optim.set_parameters (re-)creates and optimizer using
+    # model.paramters() as parameters that will be stored in the
+    # optim.optimizer.param_groups field of the torch optimizer class.
+    # Importantly, this method does not yet load the optimizer state, as
+    # essentially it builds a new optimizer with empty optimizer state and
+    # parameters from the model.
+    optim.set_parameters(model.named_parameters())
+    print(
+        "Stage 1: Keys after executing optim.set_parameters" +
+        "(model.parameters())")
+    show_optimizer_state(optim)
+
+    if opt.train_from:
+        # Stage 2: In this stage, which is only performed when loading an
+        # optimizer from a checkpoint, we load the saved_optimizer_state_dict
+        # into the re-created optimizer, to set the optim.optimizer.state
+        # field, which was previously empty. For this, we use the optimizer
+        # state saved in the "saved_optimizer_state_dict" variable for
+        # this purpose.
+        # See also: https://github.com/pytorch/pytorch/issues/2830
+        optim.optimizer.load_state_dict(saved_optimizer_state_dict)
+        # Convert back the state values to cuda type if applicable
+        if use_gpu(opt):
+            for state in optim.optimizer.state.values():
+                for k, v in state.items():
+                    if torch.is_tensor(v):
+                        state[k] = v.cuda()
+
+        print(
+            "Stage 2: Keys after executing  optim.optimizer.load_state_dict" +
+            "(saved_optimizer_state_dict)")
+        show_optimizer_state(optim)
+
+        # We want to make sure that indeed we have a non-empty optimizer state
+        # when we loaded an existing model. This should be at least the case
+        # for Adam, which saves "exp_avg" and "exp_avg_sq" state
+        # (Exponential moving average of gradient and squared gradient values)
+        if (optim.method == 'adam') and (len(optim.optimizer.state) < 1):
+            raise RuntimeError(
+                "Error: loaded Adam optimizer from existing model" +
+                " but optimizer state is empty")
 
     return optim
+
+
+# Debugging method for showing the optimizer state
+def show_optimizer_state(optim):
+    print("optim.optimizer.state_dict()['state'] keys: ")
+    for key in optim.optimizer.state_dict()['state'].keys():
+        print("optim.optimizer.state_dict()['state'] key: " + str(key))
+
+    print("optim.optimizer.state_dict()['param_groups'] elements: ")
+    for element in optim.optimizer.state_dict()['param_groups']:
+        print("optim.optimizer.state_dict()['param_groups'] element: " + str(
+            element))
 
 
 def main():
@@ -442,6 +534,10 @@ def main():
     train_model(model, fields, optim, data_type,
                 train_img_feats, valid_img_feats,
                 model_opt)
+
+    # If using tensorboard for logging, close the writer after training.
+    if opt.tensorboard:
+        writer.close()
 
 
 if __name__ == "__main__":
