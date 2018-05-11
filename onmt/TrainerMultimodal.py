@@ -62,6 +62,7 @@ class TrainerMultimodal(object):
         self.train_img_feats = train_img_feats
         self.valid_img_feats = valid_img_feats
         self.multimodal_model_type = multimodal_model_type
+        self.progress_step = 0
 
         assert(not self.train_img_feats is None), \
                 'Must provide training image features!'
@@ -111,8 +112,9 @@ class TrainerMultimodal(object):
             true_batchs.append(batch)
             accum += 1
             if self.norm_method == "tokens":
-                normalization += batch.tgt[1:].data.view(-1) \
+                num_tokens = batch.tgt[1:].data.view(-1) \
                     .ne(self.train_loss.padding_idx).sum()
+                normalization += num_tokens
             else:
                 normalization += batch.batch_size
 
@@ -124,8 +126,10 @@ class TrainerMultimodal(object):
                 if report_func is not None:
                     report_stats = report_func(
                             epoch, idx, num_batches,
+                            self.progress_step,
                             total_stats.start_time, self.optim.lr,
                             report_stats)
+                    self.progress_step += 1
 
                 true_batchs = []
                 accum = 0

@@ -1321,7 +1321,7 @@ class NMTImgDModel(nn.Module):
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
                                              else dec_state,
-                                             context_lengths=lengths)
+                                             memory_lengths=lengths)
 
         if self.multigpu:
             # Not yet supported on multi-gpu
@@ -1396,7 +1396,7 @@ class NMTImgEModel(nn.Module):
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
                                              else dec_state,
-                                             context_lengths=lengths)
+                                             memory_lengths=lengths)
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
@@ -1448,7 +1448,7 @@ class NMTImgWModel(nn.Module):
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
                                              else dec_state,
-                                             context_lengths=lengths)
+                                             memory_lengths=lengths)
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
@@ -1504,7 +1504,7 @@ class NMTSrcImgModel(nn.Module):
         out, out_imgs, dec_state, attns = self.decoder(tgt, context, img_proj,
                                                        enc_state if dec_state is None
                                                        else dec_state,
-                                                       context_lengths=lengths)
+                                                       memory_lengths=lengths)
         if self.multigpu:
             # Not yet supported on multi-gpu
             dec_state = None
