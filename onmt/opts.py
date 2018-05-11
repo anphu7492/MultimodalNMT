@@ -77,7 +77,9 @@ def model_opts(parser):
                        help="""Feed the context vector at each time step as
                        additional input (via concatenation with the word
                        embeddings) to the decoder.""")
-
+    group.add_argument('-bridge', action="store_true",
+                       help="""Have an additional layer between the last encoder
+                       state and the first decoder state""")
     group.add_argument('-rnn_type', type=str, default='LSTM',
                        choices=['LSTM', 'GRU', 'SRU'],
                        action=CheckSRU,
@@ -110,6 +112,8 @@ def model_opts(parser):
                        help='When available, train to copy.')
     group.add_argument('-reuse_copy_attn', action="store_true",
                        help="Reuse standard attention for copy")
+    group.add_argument('-copy_loss_by_seqlength', action="store_true",
+                       help="Divide copy loss by length of sequence")
     group.add_argument('-coverage_attn', action="store_true",
                        help='Train a coverage attention layer.')
     group.add_argument('-lambda_coverage', type=float, default=1,
@@ -148,10 +152,12 @@ def preprocess_opts(parser):
     # Dictionary options, for text corpus
 
     group = parser.add_argument_group('Vocab')
-    group.add_argument('-src_vocab',
-                       help="Path to an existing source vocabulary")
-    group.add_argument('-tgt_vocab',
-                       help="Path to an existing target vocabulary")
+    group.add_argument('-src_vocab', default="",
+                       help="""Path to an existing source vocabulary. Format:
+                       one word per line.""")
+    group.add_argument('-tgt_vocab', default="",
+                       help="""Path to an existing target vocabulary. Format:
+                       one word per line.""")
     group.add_argument('-features_vocabs_prefix', type=str, default='',
                        help="Path prefix to existing features vocabularies")
     group.add_argument('-src_vocab_size', type=int, default=50000,
@@ -230,6 +236,10 @@ def train_opts(parser):
                        help="""Parameters are initialized over uniform distribution
                        with support (-param_init, param_init).
                        Use 0 to not use initialization""")
+    group.add_argument('-param_init_glorot', action='store_true',
+                       help="""Init parameters with xavier_uniform.
+                       Required for transfomer.""")
+
     group.add_argument('-train_from', default='', type=str,
                        help="""If training from a checkpoint then this is the
                        path to the pretrained model's state_dict.""")
@@ -276,7 +286,8 @@ def train_opts(parser):
     group.add_argument('-epochs', type=int, default=13,
                        help='Number of training epochs')
     group.add_argument('-optim', default='sgd',
-                       choices=['sgd', 'adagrad', 'adadelta', 'adam'],
+                       choices=['sgd', 'adagrad', 'adadelta', 'adam',
+                                'sparseadam'],
                        help="""Optimization method.""")
     group.add_argument('-adagrad_accumulator_init', type=float, default=0,
                        help="""Initializes the accumulator values in adagrad.
@@ -345,6 +356,15 @@ def train_opts(parser):
                        help="Send logs to this crayon server.")
     group.add_argument('-exp', type=str, default="",
                        help="Name of the experiment for logging.")
+    # Use TensorboardX for visualization during training
+    group.add_argument('-tensorboard', action="store_true",
+                       help="""Use tensorboardX for visualization during training.
+                       Must have the library tensorboardX.""")
+    group.add_argument("-tensorboard_log_dir", type=str,
+                       default="runs/onmt",
+                       help="""Log directory for Tensorboard.
+                       This is also the name of the run.
+                       """)
 
     group = parser.add_argument_group('Speech')
     # Options most relevant to speech
@@ -398,11 +418,26 @@ def translate_opts(parser):
 
     # Alpha and Beta values for Google Length + Coverage penalty
     # Described here: https://arxiv.org/pdf/1609.08144.pdf, Section 7
+    group.add_argument('-stepwise_penalty', action='store_true',
+                       help="""Apply penalty at every decoding step.
+                       Helpful for summary penalty.""")
+    group.add_argument('-length_penalty', default='none',
+                       choices=['none', 'wu', 'avg'],
+                       help="""Length Penalty to use.""")
+    group.add_argument('-coverage_penalty', default='none',
+                       choices=['none', 'wu', 'summary'],
+                       help="""Coverage Penalty to use.""")
     group.add_argument('-alpha', type=float, default=0.,
                        help="""Google NMT length penalty parameter
                         (higher = longer generation)""")
     group.add_argument('-beta', type=float, default=-0.,
                        help="""Coverage penalty parameter""")
+    group.add_argument('-block_ngram_repeat', type=int, default=0,
+                       help='Block repetition of ngrams during decoding.')
+    group.add_argument('-ignore_when_blocking', nargs='+', type=str,
+                       default=[],
+                       help="""Ignore these strings when blocking repeats.
+                       You want to block sentence delimiters.""")
     group.add_argument('-replace_unk', action="store_true",
                        help="""Replace the generated UNK tokens with the
                        source token that had highest attention weight. If

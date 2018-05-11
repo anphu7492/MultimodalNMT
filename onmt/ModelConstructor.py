@@ -15,6 +15,7 @@ from onmt.modules import Embeddings, ImageEncoder, CopyGenerator, \
                          TransformerEncoder, TransformerDecoder, \
                          CNNEncoder, CNNDecoder, AudioEncoder
 from onmt.Utils import use_gpu
+from torch.nn.init import xavier_uniform
 
 # additional imports for multi-modal NMT
 from onmt.Models import ImageGlobalFeaturesProjector, \
@@ -55,7 +56,8 @@ def make_embeddings(opt, word_dict, feature_dicts, for_encoder=True):
                       word_padding_idx=word_padding_idx,
                       feat_padding_idx=feats_padding_idx,
                       word_vocab_size=num_word_embeddings,
-                      feat_vocab_sizes=num_feat_embeddings)
+                      feat_vocab_sizes=num_feat_embeddings,
+                      sparse=opt.optim == "sparseadam")
 
 
 def make_encoder(opt, embeddings):
@@ -77,7 +79,8 @@ def make_encoder(opt, embeddings):
     else:
         # "rnn" or "brnn"
         return RNNEncoder(opt.rnn_type, opt.brnn, opt.enc_layers,
-                          opt.rnn_size, opt.dropout, embeddings)
+                          opt.rnn_size, opt.dropout, embeddings,
+                          opt.bridge)
 
 
 def make_decoder(opt, embeddings):
@@ -221,7 +224,7 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None):
     if not model_opt.copy_attn:
         generator = nn.Sequential(
             nn.Linear(model_opt.rnn_size, len(fields["tgt"].vocab)),
-            nn.LogSoftmax())
+            nn.LogSoftmax(dim=-1))
         if model_opt.share_decoder_embeddings:
             generator[0].weight = decoder.embeddings.word_lut.weight
     else:
@@ -240,6 +243,14 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None):
                 p.data.uniform_(-model_opt.param_init, model_opt.param_init)
             for p in generator.parameters():
                 p.data.uniform_(-model_opt.param_init, model_opt.param_init)
+        if model_opt.param_init_glorot:
+            for p in model.parameters():
+                if p.dim() > 1:
+                    xavier_uniform(p)
+            for p in generator.parameters():
+                if p.dim() > 1:
+                    xavier_uniform(p)
+
         if hasattr(model.encoder, 'embeddings'):
             model.encoder.embeddings.load_pretrained_vectors(
                     model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)

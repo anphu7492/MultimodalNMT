@@ -3,6 +3,7 @@
 
 [![Build Status](https://travis-ci.org/OpenNMT/OpenNMT-py.svg?branch=master)](https://travis-ci.org/OpenNMT/OpenNMT-py)
 
+
 This is the implementation of **four different multi-modal neural machine translation models** described in the research papers [(1)](http://aclweb.org/anthology/D17-1105) and [(2)](https://aclweb.org/anthology/P/P17/P17-1175.pdf).
 They are based on the [Pytorch](https://github.com/pytorch/pytorch) port of [OpenNMT](https://github.com/OpenNMT/OpenNMT), an open-source (MIT) neural machine translation system.
 
@@ -46,14 +47,14 @@ The following OpenNMT features are implemented:
 - [Copy and Coverage Attention](http://opennmt.net/OpenNMT-py/options/train.html#model-attention)
 - [Image-to-text processing](http://opennmt.net/OpenNMT-py/im2text.html)
 - [Speech-to-text processing](http://opennmt.net/OpenNMT-py/speech2text.html)
+- ["Attention is all you need"](http://opennmt.net/OpenNMT-py/FAQ.html#how-do-i-use-the-transformer-model)
+- Inference time loss functions.
 
 Beta Features (committed):
 - multi-GPU
-- ["Attention is all you need"](http://opennmt.net/OpenNMT-py/FAQ.html#how-do-i-use-the-transformer-model)
 - Structured attention
 - [Conv2Conv convolution model]
 - SRU "RNNs faster than CNN" paper
-- Inference time loss functions.
 
 ## Multi-modal NMT Quickstart
 
@@ -117,6 +118,7 @@ python translate_mm.py -src ~/exp/opennmt_imgd/data_multi30k/test2016.norm.tok.l
 ```
 
 ## Citation
+
 
 If you use the multi-modal NMT models in this repository, please consider citing the research papers where they are described [(1)](http://aclweb.org/anthology/D17-1105) and [(2)](https://aclweb.org/anthology/P/P17/P17-1175.pdf):
 

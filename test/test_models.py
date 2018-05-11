@@ -8,14 +8,14 @@ from torch.autograd import Variable
 
 import onmt
 import onmt.io
-import opts
+import onmt.opts
 from onmt.ModelConstructor import make_embeddings, \
-                            make_encoder, make_decoder
+    make_encoder, make_decoder
 from onmt.modules import ImageEncoder, AudioEncoder
 
 parser = argparse.ArgumentParser(description='train.py')
-opts.model_opts(parser)
-opts.train_opts(parser)
+onmt.opts.model_opts(parser)
+onmt.opts.train_opts(parser)
 
 # -data option is required, but not used in this test, so dummy.
 opt = parser.parse_known_args(['-data', 'dummy'])[0]
@@ -38,7 +38,7 @@ class TestModel(unittest.TestCase):
         # len x batch x nfeat
         test_src = Variable(torch.ones(source_l, bsize, 1)).long()
         test_tgt = Variable(torch.ones(source_l, bsize, 1)).long()
-        test_length = torch.ones(bsize).fill_(source_l)
+        test_length = torch.ones(bsize).fill_(source_l).long()
         return test_src, test_tgt, test_length
 
     def get_batch_image(self, tgt_l=3, bsize=1, h=15, w=17):
@@ -174,9 +174,9 @@ class TestModel(unittest.TestCase):
         model = onmt.Models.NMTModel(enc, dec)
 
         test_src, test_tgt, test_length = self.get_batch_image(
-                                                         h=h, w=w,
-                                                         bsize=bsize,
-                                                         tgt_l=tgt_l)
+            h=h, w=w,
+            bsize=bsize,
+            tgt_l=tgt_l)
         outputs, attn, _ = model(test_src,
                                  test_tgt,
                                  test_length)
@@ -216,10 +216,10 @@ class TestModel(unittest.TestCase):
         model = onmt.Models.NMTModel(enc, dec)
 
         test_src, test_tgt, test_length = self.get_batch_audio(
-                                                  bsize=bsize,
-                                                  sample_rate=opt.sample_rate,
-                                                  window_size=opt.window_size,
-                                                  t=t, tgt_l=tgt_l)
+            bsize=bsize,
+            sample_rate=opt.sample_rate,
+            window_size=opt.window_size,
+            t=t, tgt_l=tgt_l)
         outputs, attn, _ = model(test_src,
                                  test_tgt,
                                  test_length)
