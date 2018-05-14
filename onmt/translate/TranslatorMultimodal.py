@@ -57,7 +57,8 @@ def make_translator(opt, report_score=True, out_file=None):
               for k in ["beam_size", "n_best", "max_length", "min_length",
                         "stepwise_penalty", "block_ngram_repeat",
                         "ignore_when_blocking", "dump_beam",
-                        "data_type", "replace_unk", "gpu", "verbose"]}
+                        "data_type", "replace_unk", "gpu", "verbose",
+                        "output", "report_bleu", "report_rouge"]}
 
     translator = TranslatorMultimodal(model, fields,
                                       global_scorer=scorer,
@@ -115,6 +116,7 @@ class TranslatorMultimodal(object):
                  report_rouge=False,
                  verbose=False,
                  out_file=None,
+                 output="output.txt",
                  test_img_feats=None,
                  multimodal_model_type=None):
         self.gpu = gpu
@@ -144,6 +146,7 @@ class TranslatorMultimodal(object):
         self.report_score = report_score
         self.report_bleu = report_bleu
         self.report_rouge = report_rouge
+        self.output = output
 
         # multimodal
         self.test_img_feats = test_img_feats
@@ -232,7 +235,7 @@ class TranslatorMultimodal(object):
                         output += row_format.format(word, *row) + '\n'
                         row_format = "{:>10.10} " + "{:>10.7f} " * len(srcs)
                     os.write(1, output.encode('utf-8'))
-
+        print(self.report_score, self.report_bleu, tgt_path)            
         if self.report_score:
             self._report_score('PRED', pred_score_total, pred_words_total)
             if tgt_path is not None:
@@ -522,11 +525,11 @@ class TranslatorMultimodal(object):
 
         if self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
             dec_out, dec_states, attn = self.model.decoder(
-                tgt_in, memory_bank, dec_states, context_lengths=src_lengths)
+                tgt_in, memory_bank, dec_states, memory_lengths=src_lengths)
         elif self.multimodal_model_type == 'src+img':
             dec_out, dec_out_imgs, dec_states, attn = self.model.decoder(
                     tgt_in, memory_bank, img_proj, dec_states,
-                    context_lengths=src_lengths)
+                    memory_lengths=src_lengths)
         else:
             raise Exception("Multi-modal odel type not implemented: %s"%(
                 self.multimodal_model_type))
@@ -549,10 +552,10 @@ class TranslatorMultimodal(object):
     def _report_bleu(self, tgt_path):
         import subprocess
         path = os.path.split(os.path.realpath(__file__))[0]
+        print("Calculating bleu score: %s, %s, %s" % (path, tgt_path, self.output))
         print()
 
-        res = subprocess.check_output("perl %s/tools/multi-bleu.perl %s"
-                                      % (path, tgt_path, self.output),
+        res = subprocess.check_output("perl {0}/../../tools/multi-bleu.perl %{1}".format(path, tgt_path, self.output),
                                       stdin=self.out_file,
                                       shell=True).decode("utf-8")
 

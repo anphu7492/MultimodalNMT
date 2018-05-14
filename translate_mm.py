@@ -21,4 +21,5 @@ if __name__ == "__main__":
     onmt.opts.translate_mm_opts(parser)
 
     opt = parser.parse_args()
+    print(opt)
     main(opt)

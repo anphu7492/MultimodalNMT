@@ -352,7 +352,7 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         model = NMTSrcImgModel(encoder, decoder, encoder_image)
     else:
         raise Exception("Multi-modal model type not yet implemented: %s"%(
-                        opt.multimodal_model_type))
+                        model_opt.multimodal_model_type))
 
     model.model_type = model_opt.model_type
 
