@@ -16,7 +16,7 @@ import tables
 
 def make_translator(opt, report_score=True, out_file=None):
     if out_file is None:
-        out_file = codecs.open(opt.output, 'w', 'utf-8')
+        out_file = codecs.open(opt.output, 'w+', 'utf-8')
 
     if opt.gpu > -1:
         torch.cuda.set_device(opt.gpu)
@@ -58,7 +58,7 @@ def make_translator(opt, report_score=True, out_file=None):
                         "stepwise_penalty", "block_ngram_repeat",
                         "ignore_when_blocking", "dump_beam",
                         "data_type", "replace_unk", "gpu", "verbose",
-                        "output", "report_bleu", "report_rouge"]}
+                        "report_bleu", "report_rouge"]}
 
     translator = TranslatorMultimodal(model, fields,
                                       global_scorer=scorer,
@@ -116,7 +116,6 @@ class TranslatorMultimodal(object):
                  report_rouge=False,
                  verbose=False,
                  out_file=None,
-                 output="output.txt",
                  test_img_feats=None,
                  multimodal_model_type=None):
         self.gpu = gpu
@@ -146,7 +145,6 @@ class TranslatorMultimodal(object):
         self.report_score = report_score
         self.report_bleu = report_bleu
         self.report_rouge = report_rouge
-        self.output = output
 
         # multimodal
         self.test_img_feats = test_img_feats
@@ -551,11 +549,15 @@ class TranslatorMultimodal(object):
 
     def _report_bleu(self, tgt_path):
         import subprocess
-        path = os.path.split(os.path.realpath(__file__))[0]
-        print("Calculating bleu score: %s, %s, %s" % (path, tgt_path, self.output))
+        # path = os.path.split(os.path.realpath(__file__))[0]
+        base_dir = os.path.abspath(__file__ + "/../../..")
+        tgt_path = os.path.join(os.getcwd(), tgt_path)
+        # Rollback pointer to the beginning.
+        self.out_file.seek(0)
         print()
+        print("Calculating bleu score...")
 
-        res = subprocess.check_output("perl {0}/../../tools/multi-bleu.perl %{1}".format(path, tgt_path, self.output),
+        res = subprocess.check_output("perl %s/tools/multi-bleu.perl %s" % (base_dir, tgt_path),
                                       stdin=self.out_file,
                                       shell=True).decode("utf-8")
 
@@ -563,10 +565,11 @@ class TranslatorMultimodal(object):
 
     def _report_rouge(self, tgt_path):
         import subprocess
-        path = os.path.split(os.path.realpath(__file__))[0]
+        # path = os.path.split(os.path.realpath(__file__))[0]
+        base_dir = os.path.abspath(__file__ + "/../../..")
         res = subprocess.check_output(
             "python %s/tools/test_rouge.py -r %s -c STDIN"
-            % (path, tgt_path),
+            % (base_dir, tgt_path),
             shell=True,
             stdin=self.out_file).decode("utf-8")
         print(res.strip())
