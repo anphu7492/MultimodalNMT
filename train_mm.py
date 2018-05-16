@@ -522,6 +522,8 @@ def main():
     # Report src/tgt features.
     collect_report_features(fields)
 
+    model_opt.img_feat_dim = train_img_feats.shape[1]
+    
     # Build model.
     model = build_model(model_opt, opt, fields, checkpoint)
     tally_parameters(model)
