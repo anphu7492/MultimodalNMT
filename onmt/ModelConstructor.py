@@ -406,9 +406,11 @@ def make_encoder_image_global_features(opt):
     """
     # TODO: feat_size and num_layers only tested with vgg and resnet networks.
     # Validate that these values work for other CNN architectures as well.
-    if 'vgg' in opt.path_to_train_img_feats.lower():
+    if opt.img_feat_dim:
+        feat_size = opt.img_feat_dim
+    elif 'vgg' in opt.path_to_train_img_feats.lower(): # if not defined, use "heuristics"
         feat_size = 4096
-    else:
+    else: # fallback
         feat_size = 2048
 
     if opt.multimodal_model_type == 'imgw':
