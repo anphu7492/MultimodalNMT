@@ -1,4 +1,5 @@
 from __future__ import division
+
 """
 This is the loadable seq2seq trainer library that is
 in charge of training details, loss compute, and statistics.
@@ -64,16 +65,16 @@ class TrainerMultimodal(object):
         self.multimodal_model_type = multimodal_model_type
         self.progress_step = 0
 
-        assert(not self.train_img_feats is None), \
-                'Must provide training image features!'
-        assert(not self.valid_img_feats is None), \
-                'Must provide validation image features!'
-        assert(self.multimodal_model_type in ['imgw', 'imge', 'imgd', 'src+img']), \
-                'Invalid multimodal model type: %s!'%(self.multimodal_model_type)
+        assert (not self.train_img_feats is None), \
+            'Must provide training image features!'
+        assert (not self.valid_img_feats is None), \
+            'Must provide validation image features!'
+        assert (self.multimodal_model_type in ['imgw', 'imge', 'imgd', 'src+img']), \
+            'Invalid multimodal model type: %s!' % (self.multimodal_model_type)
 
-        assert(grad_accum_count > 0)
+        assert (grad_accum_count > 0)
         if grad_accum_count > 1:
-            assert(self.trunc_size == 0), \
+            assert (self.trunc_size == 0), \
                 """To enable accumulated gradients,
                    you must disable target sequence truncating."""
 
@@ -120,15 +121,15 @@ class TrainerMultimodal(object):
 
             if accum == self.grad_accum_count:
                 self._gradient_accumulation(
-                        true_batchs, total_stats,
-                        report_stats, normalization)
+                    true_batchs, total_stats,
+                    report_stats, normalization)
 
                 if report_func is not None:
                     report_stats = report_func(
-                            epoch, idx, num_batches,
-                            self.progress_step,
-                            total_stats.start_time, self.optim.lr,
-                            report_stats)
+                        epoch, idx, num_batches,
+                        self.progress_step,
+                        total_stats.start_time, self.optim.lr,
+                        report_stats)
                     self.progress_step += 1
 
                 true_batchs = []
@@ -138,8 +139,8 @@ class TrainerMultimodal(object):
 
         if len(true_batchs) > 0:
             self._gradient_accumulation(
-                    true_batchs, total_stats,
-                    report_stats, normalization)
+                true_batchs, total_stats,
+                report_stats, normalization)
             true_batchs = []
 
         return total_stats
@@ -170,7 +171,7 @@ class TrainerMultimodal(object):
             # extract indices for all entries in the mini-batch
             idxs = batch.indices.cpu().data.numpy()
             # load image features for this minibatch into a pytorch Variable
-            img_feats = torch.from_numpy( self.valid_img_feats[idxs] )
+            img_feats = torch.from_numpy(self.valid_img_feats[idxs])
             img_feats = torch.autograd.Variable(img_feats, requires_grad=False)
             if next(self.model.parameters()).is_cuda:
                 img_feats = img_feats.cuda()
@@ -183,12 +184,12 @@ class TrainerMultimodal(object):
             elif self.multimodal_model_type in ['imgw', 'imge', 'imgd']:
                 outputs, attns, _ = self.model(src, tgt, src_lengths, img_feats)
             else:
-                raise Exception("Multimodal model type not yet supported: %s"%(
-                        self.multimodal_model_type))
+                raise Exception("Multimodal model type not yet supported: %s" % (
+                    self.multimodal_model_type))
 
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
-                    batch, outputs, attns)
+                batch, outputs, attns)
 
             # Update statistics.
             stats.update(batch_stats)
@@ -243,7 +244,7 @@ class TrainerMultimodal(object):
             # extract indices for all entries in the mini-batch
             idxs = batch.indices.cpu().data.numpy()
             # load image features for this minibatch into a pytorch Variable
-            img_feats = torch.from_numpy( self.train_img_feats[idxs] )
+            img_feats = torch.from_numpy(self.train_img_feats[idxs])
             img_feats = torch.autograd.Variable(img_feats, requires_grad=False)
             if next(self.model.parameters()).is_cuda:
                 img_feats = img_feats.cuda()
@@ -267,7 +268,7 @@ class TrainerMultimodal(object):
 
             tgt_outer = onmt.io.make_features(batch, 'tgt')
 
-            for j in range(0, target_size-1, trunc_size):
+            for j in range(0, target_size - 1, trunc_size):
                 # 1. Create truncated target.
                 tgt = tgt_outer[j: j + trunc_size]
 
@@ -281,13 +282,13 @@ class TrainerMultimodal(object):
                     outputs, attns, dec_state = \
                         self.model(src, tgt, src_lengths, img_feats, dec_state)
                 else:
-                    raise Exception("Multimodal model type not yet supported: %s"%(
-                            self.multimodal_model_type))
+                    raise Exception("Multimodal model type not yet supported: %s" % (
+                        self.multimodal_model_type))
 
                 # 3. Compute loss in shards for memory efficiency.
                 batch_stats = self.train_loss.sharded_compute_loss(
-                        batch, outputs, attns, j,
-                        trunc_size, self.shard_size, normalization)
+                    batch, outputs, attns, j,
+                    trunc_size, self.shard_size, normalization)
 
                 # 4. Update the parameters and statistics.
                 if self.grad_accum_count == 1:

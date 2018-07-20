@@ -10,20 +10,21 @@ import onmt.io
 import onmt.Models
 import onmt.modules
 from onmt.Models import NMTModel, MeanEncoder, RNNEncoder, \
-                        StdRNNDecoder, InputFeedRNNDecoder
+    StdRNNDecoder, InputFeedRNNDecoder
 from onmt.modules import Embeddings, ImageEncoder, CopyGenerator, \
-                         TransformerEncoder, TransformerDecoder, \
-                         CNNEncoder, CNNDecoder, AudioEncoder
+    TransformerEncoder, TransformerDecoder, \
+    CNNEncoder, CNNDecoder, AudioEncoder
 from onmt.Utils import use_gpu
 from torch.nn.init import xavier_uniform
 
 # additional imports for multi-modal NMT
 from onmt.Models import ImageGlobalFeaturesProjector, \
-                        ImageLocalFeaturesProjector, \
-                        StdRNNDecoderDoublyAttentive, \
-                        InputFeedRNNDecoderDoublyAttentive, \
-                        NMTImgDModel, NMTImgEModel, NMTImgWModel, \
-                        NMTSrcImgModel, RNNEncoderImageAsWord
+    ImageLocalFeaturesProjector, \
+    StdRNNDecoderDoublyAttentive, \
+    InputFeedRNNDecoderDoublyAttentive, \
+    NMTImgDModel, NMTImgEModel, NMTImgWModel, \
+    NMTSrcImgModel, RNNEncoderImageAsWord
+
 
 def make_embeddings(opt, word_dict, feature_dicts, for_encoder=True):
     """
@@ -101,24 +102,24 @@ def make_decoder(opt, embeddings):
                           embeddings)
     elif opt.decoder_type == "doubly-attentive-rnn" and not opt.input_feed:
         return StdRNNDecoderDoublyAttentive(opt.rnn_type,
-                             opt.brnn,
-                             opt.dec_layers, opt.rnn_size,
-                             opt.global_attention,
-                             opt.coverage_attn,
-                             opt.context_gate,
-                             opt.copy_attn,
-                             opt.dropout,
-                             embeddings)
+                                            opt.brnn,
+                                            opt.dec_layers, opt.rnn_size,
+                                            opt.global_attention,
+                                            opt.coverage_attn,
+                                            opt.context_gate,
+                                            opt.copy_attn,
+                                            opt.dropout,
+                                            embeddings)
     elif opt.decoder_type == "doubly-attentive-rnn" and opt.input_feed:
         return InputFeedRNNDecoderDoublyAttentive(opt.rnn_type, opt.brnn,
-                                   opt.dec_layers, opt.rnn_size,
-                                   opt.global_attention,
-                                   opt.coverage_attn,
-                                   opt.context_gate,
-                                   opt.copy_attn,
-                                   opt.dropout,
-                                   embeddings,
-                                   opt.reuse_copy_attn)
+                                                  opt.dec_layers, opt.rnn_size,
+                                                  opt.global_attention,
+                                                  opt.coverage_attn,
+                                                  opt.context_gate,
+                                                  opt.copy_attn,
+                                                  opt.dropout,
+                                                  embeddings,
+                                                  opt.reuse_copy_attn)
     elif opt.input_feed:
         return InputFeedRNNDecoder(opt.rnn_type, opt.brnn,
                                    opt.dec_layers, opt.rnn_size,
@@ -153,11 +154,11 @@ def load_test_model(opt, dummy_opt):
             model_opt.__dict__[arg] = dummy_opt[arg]
 
     if 'multimodal_model_type' in opt:
-        print( 'Building multi-modal model...' )
+        print('Building multi-modal model...')
         model = make_base_model_mmt(model_opt, fields,
                                     use_gpu(opt), checkpoint)
     else:
-        print( 'Building text-only model...' )
+        print('Building text-only model...')
         model = make_base_model(model_opt, fields,
                                 use_gpu(opt), checkpoint)
     model.eval()
@@ -253,10 +254,10 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None):
 
         if hasattr(model.encoder, 'embeddings'):
             model.encoder.embeddings.load_pretrained_vectors(
-                    model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
+                model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
         if hasattr(model.decoder, 'embeddings'):
             model.decoder.embeddings.load_pretrained_vectors(
-                    model_opt.pre_word_vecs_dec, model_opt.fix_word_vecs_dec)
+                model_opt.pre_word_vecs_dec, model_opt.fix_word_vecs_dec)
 
     # Add generator to model (this registers it as parameter of model).
     model.generator = generator
@@ -290,16 +291,16 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         feature_dicts = onmt.io.collect_feature_vocabs(fields, 'src')
         src_embeddings = make_embeddings(model_opt, src_dict,
                                          feature_dicts)
-        #encoder = make_encoder(model_opt, src_embeddings)
+        # encoder = make_encoder(model_opt, src_embeddings)
         if model_opt.multimodal_model_type in ['imgd', 'imge', 'src+img']:
             encoder = make_encoder(model_opt, src_embeddings)
-        elif  model_opt.multimodal_model_type == 'imgw':
+        elif model_opt.multimodal_model_type == 'imgw':
             # model ImgW uses a specific source-language encoder
             encoder = RNNEncoderImageAsWord(model_opt.rnn_type,
-                    model_opt.brnn, model_opt.enc_layers,
-                    model_opt.rnn_size, model_opt.dropout, src_embeddings)
+                                            model_opt.brnn, model_opt.enc_layers,
+                                            model_opt.rnn_size, model_opt.dropout, src_embeddings)
         else:
-            raise Exception("Multi-modal model type not implemented: %s"%
+            raise Exception("Multi-modal model type not implemented: %s" %
                             model_opt.multimodal_model_type)
     elif model_opt.model_type == "img":
         encoder = ImageEncoder(model_opt.enc_layers,
@@ -339,8 +340,8 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         encoder_image = make_encoder_image_global_features(model_opt)
 
     # Make NMTModel(= encoder + decoder).
-    #model = NMTModel(encoder, decoder)
-    #model.model_type = model_opt.model_type
+    # model = NMTModel(encoder, decoder)
+    # model.model_type = model_opt.model_type
     if model_opt.multimodal_model_type == 'imgd':
         model = NMTImgDModel(encoder, decoder, encoder_image)
     elif model_opt.multimodal_model_type == 'imge':
@@ -351,8 +352,8 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
         # using image encoder only to reshape local features
         model = NMTSrcImgModel(encoder, decoder, encoder_image)
     else:
-        raise Exception("Multi-modal model type not yet implemented: %s"%(
-                        model_opt.multimodal_model_type))
+        raise Exception("Multi-modal model type not yet implemented: %s" % (
+            model_opt.multimodal_model_type))
 
     model.model_type = model_opt.model_type
 
@@ -381,10 +382,10 @@ def make_base_model_mmt(model_opt, fields, gpu, checkpoint=None):
                 p.data.uniform_(-model_opt.param_init, model_opt.param_init)
         if hasattr(model.encoder, 'embeddings'):
             model.encoder.embeddings.load_pretrained_vectors(
-                    model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
+                model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
         if hasattr(model.decoder, 'embeddings'):
             model.decoder.embeddings.load_pretrained_vectors(
-                    model_opt.pre_word_vecs_dec, model_opt.fix_word_vecs_dec)
+                model_opt.pre_word_vecs_dec, model_opt.fix_word_vecs_dec)
 
     # Add generator to model (this registers it as parameter of model).
     model.generator = generator
@@ -408,9 +409,9 @@ def make_encoder_image_global_features(opt):
     # Validate that these values work for other CNN architectures as well.
     if opt.img_feat_dim:
         feat_size = opt.img_feat_dim
-    elif 'vgg' in opt.path_to_train_img_feats.lower(): # if not defined, use "heuristics"
+    elif 'vgg' in opt.path_to_train_img_feats.lower():  # if not defined, use "heuristics"
         feat_size = 4096
-    else: # fallback
+    else:  # fallback
         feat_size = 2048
 
     if opt.multimodal_model_type == 'imgw':
@@ -420,7 +421,8 @@ def make_encoder_image_global_features(opt):
     elif opt.multimodal_model_type == 'imgd':
         num_layers = opt.dec_layers
     return ImageGlobalFeaturesProjector(num_layers, feat_size, opt.rnn_size,
-            opt.dropout_imgs, opt.use_nonlinear_projection)
+                                        opt.dropout_imgs, opt.use_nonlinear_projection)
+
 
 def make_encoder_image_local_features(opt):
     """
@@ -436,5 +438,4 @@ def make_encoder_image_local_features(opt):
         feat_size = 2048
     num_layers = 1
     return ImageLocalFeaturesProjector(num_layers, feat_size, opt.rnn_size,
-            opt.dropout_imgs, opt.use_nonlinear_projection)
-
+                                       opt.dropout_imgs, opt.use_nonlinear_projection)

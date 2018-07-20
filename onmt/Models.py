@@ -12,6 +12,7 @@ import onmt
 from onmt.Utils import aeq
 import sys
 
+
 def rnn_factory(rnn_type, **kwargs):
     # Use pytorch version when available.
     no_pack_padded_seq = False
@@ -48,6 +49,7 @@ class EncoderBase(nn.Module):
           E-->F
           E-->G
     """
+
     def _check_args(self, input, lengths=None, hidden=None):
         s_len, n_batch, n_feats = input.size()
         if lengths is not None:
@@ -78,6 +80,7 @@ class MeanEncoder(EncoderBase):
        num_layers (int): number of replicated layers
        embeddings (:obj:`onmt.modules.Embeddings`): embedding module to use
     """
+
     def __init__(self, num_layers, embeddings):
         super(MeanEncoder, self).__init__()
         self.num_layers = num_layers
@@ -107,6 +110,7 @@ class RNNEncoder(EncoderBase):
        dropout (float) : dropout value for :obj:`nn.Dropout`
        embeddings (:obj:`onmt.modules.Embeddings`): embedding module to use
     """
+
     def __init__(self, rnn_type, bidirectional, num_layers,
                  hidden_size, dropout=0.0, embeddings=None,
                  use_bridge=False):
@@ -174,6 +178,7 @@ class RNNEncoder(EncoderBase):
         """
         Forward hidden state through bridge
         """
+
         def bottle_hidden(linear, states):
             """
             Transform from 3D to 2D, apply linear and return initial size
@@ -236,6 +241,7 @@ class RNNDecoderBase(nn.Module):
        dropout (float) : dropout value for :obj:`nn.Dropout`
        embeddings (:obj:`onmt.modules.Embeddings`): embedding module to use
     """
+
     def __init__(self, rnn_type, bidirectional_encoder, num_layers,
                  hidden_size, attn_type="general",
                  coverage_attn=False, context_gate=None,
@@ -338,7 +344,7 @@ class RNNDecoderBase(nn.Module):
         if isinstance(encoder_final, tuple):  # LSTM
             return RNNDecoderState(self.hidden_size,
                                    tuple([_fix_enc_hidden(enc_hid)
-                                         for enc_hid in encoder_final]))
+                                          for enc_hid in encoder_final]))
         else:  # GRU
             return RNNDecoderState(self.hidden_size,
                                    _fix_enc_hidden(encoder_final))
@@ -359,6 +365,7 @@ class StdRNNDecoder(RNNDecoderBase):
     Implemented without input_feeding and currently with no `coverage_attn`
     or `copy_attn` support.
     """
+
     def _run_forward_pass(self, tgt, memory_bank, state, memory_lengths=None):
         """
         Private helper for running the specific RNN forward pass.
@@ -528,7 +535,7 @@ class InputFeedRNNDecoder(RNNDecoderBase):
     def _build_rnn(self, rnn_type, input_size,
                    hidden_size, num_layers, dropout):
         assert not rnn_type == "SRU", "SRU doesn't support input feed! " \
-                "Please set -input_feed 0!"
+                                      "Please set -input_feed 0!"
         if rnn_type == "LSTM":
             stacked_cell = onmt.modules.StackedLSTM
         else:
@@ -554,6 +561,7 @@ class NMTModel(nn.Module):
       decoder (:obj:`RNNDecoderBase`): a decoder object
       multi<gpu (bool): setup for multigpu support
     """
+
     def __init__(self, encoder, decoder, multigpu=False):
         self.multigpu = multigpu
         super(NMTModel, self).__init__()
@@ -606,6 +614,7 @@ class DecoderState(object):
 
     Modules need to implement this to utilize beam search decoding.
     """
+
     def detach(self):
         for h in self._all:
             if h is not None:
@@ -672,14 +681,15 @@ class ImageGlobalFeaturesProjector(nn.Module):
     """
         Project global image features using a 2-layer multi-layer perceptron.
     """
+
     def __init__(self, num_layers, nfeats, outdim, dropout,
-            use_nonlinear_projection):
+                 use_nonlinear_projection):
         """
         Args:
             num_layers (int): number of decoder layers.
             nfeats (int): size of image features.
             outdim (int): size of the output dimension.
-            dropout (float): dropout probablity.
+            dropout (float): dropout probability.
             use_nonliner_projection (bool): use non-linear activation
                     when projecting the image features or not.
         """
@@ -688,35 +698,37 @@ class ImageGlobalFeaturesProjector(nn.Module):
         self.nfeats = nfeats
         self.outdim = outdim
         self.dropout = dropout
-        
+
         layers = []
-        layers.append( nn.Linear(nfeats, nfeats) )
+        layers.append(nn.Linear(nfeats, nfeats))
         if use_nonlinear_projection:
-            layers.append( nn.Tanh() )
-        layers.append( nn.Dropout(dropout) )
+            layers.append(nn.Tanh())
+        layers.append(nn.Dropout(dropout))
         # final layers projects from nfeats to decoder rnn hidden state size
-        layers.append( nn.Linear(nfeats, outdim*num_layers) )
+        layers.append(nn.Linear(nfeats, outdim * num_layers))
         if use_nonlinear_projection:
-            layers.append( nn.Tanh() )
-        layers.append( nn.Dropout(dropout) )
-        #self.batch_norm = nn.BatchNorm2d(512)
+            layers.append(nn.Tanh())
+        layers.append(nn.Dropout(dropout))
+        # self.batch_norm = nn.BatchNorm2d(512)
         self.layers = nn.Sequential(*layers)
 
     def forward(self, input):
         out = self.layers(input)
-        #print( "out.size(): ", out.size() )
-        if self.num_layers>1:
+        # print( "out.size(): ", out.size() )
+        if self.num_layers > 1:
             out = out.unsqueeze(0)
-            out = torch.cat([out[:,:,0:out.size(2):2], out[:,:,1:out.size(2):2]], 0)
-            #print( "out.size(): ", out.size() )
+            out = torch.cat([out[:, :, 0:out.size(2):2], out[:, :, 1:out.size(2):2]], 0)
+            # print( "out.size(): ", out.size() )
         return out
 
 
 class View(nn.Module):
     """Helper class to be used inside Sequential object to reshape Variables"""
+
     def __init__(self, *shape):
         super(View, self).__init__()
         self.shape = shape
+
     def forward(self, input):
         return input.view(*self.shape)
 
@@ -725,8 +737,9 @@ class ImageLocalFeaturesProjector(nn.Module):
     """
         Reshape local image features.
     """
+
     def __init__(self, num_layers, nfeats, outdim, dropout,
-            use_nonlinear_projection):
+                 use_nonlinear_projection):
         """
         Args:
             num_layers (int): 1.
@@ -737,27 +750,27 @@ class ImageLocalFeaturesProjector(nn.Module):
                     when projecting the image features or not.
         """
         super(ImageLocalFeaturesProjector, self).__init__()
-        assert(num_layers==1), \
-                'num_layers must be equal to 1 !'
+        assert (num_layers == 1), \
+            'num_layers must be equal to 1 !'
         self.num_layers = num_layers
         self.nfeats = nfeats
         self.dropout = dropout
-        
+
         layers = []
         # reshape input
-        layers.append( View(-1, 7*7, nfeats) )
+        layers.append(View(-1, 7 * 7, nfeats))
         # linear projection from feats to rnn size
-        layers.append( nn.Linear(nfeats, outdim*num_layers) )
+        layers.append(nn.Linear(nfeats, outdim * num_layers))
         if use_nonlinear_projection:
-            layers.append( nn.Tanh() )
-        layers.append( nn.Dropout(dropout) )
-        #self.batch_norm = nn.BatchNorm2d(512)
+            layers.append(nn.Tanh())
+        layers.append(nn.Dropout(dropout))
+        # self.batch_norm = nn.BatchNorm2d(512)
         self.layers = nn.Sequential(*layers)
 
     def forward(self, input):
         out = self.layers(input)
-        #print( "out.size(): ", out.size() )
-        #if self.num_layers>1:
+        # print( "out.size(): ", out.size() )
+        # if self.num_layers>1:
         #    out = out.unsqueeze(0)
         #    out = torch.cat([out[:,:,0:out.size(2):2], out[:,:,1:out.size(2):2]], 0)
         #    #print( "out.size(): ", out.size() )
@@ -766,6 +779,7 @@ class ImageLocalFeaturesProjector(nn.Module):
 
 class RNNEncoderImageAsWord(EncoderBase):
     """ The RNN encoder that uses image features as words. """
+
     def __init__(self, rnn_type, bidirectional, num_layers,
                  hidden_size, dropout, embeddings):
         super(RNNEncoderImageAsWord, self).__init__()
@@ -781,18 +795,18 @@ class RNNEncoderImageAsWord(EncoderBase):
             # SRU doesn't support PackedSequence.
             self.no_pack_padded_seq = True
             self.rnn = onmt.modules.SRU(
-                    input_size=embeddings.embedding_size,
-                    hidden_size=hidden_size,
-                    num_layers=num_layers,
-                    dropout=dropout,
-                    bidirectional=bidirectional)
+                input_size=embeddings.embedding_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout,
+                bidirectional=bidirectional)
         else:
             self.rnn = getattr(nn, rnn_type)(
-                    input_size=embeddings.embedding_size,
-                    hidden_size=hidden_size,
-                    num_layers=num_layers,
-                    dropout=dropout,
-                    bidirectional=bidirectional)
+                input_size=embeddings.embedding_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout,
+                bidirectional=bidirectional)
 
     def forward(self, input, img_feats, lengths=None, hidden=None):
         """ See EncoderBase.forward() for description of args and returns."""
@@ -803,12 +817,12 @@ class RNNEncoderImageAsWord(EncoderBase):
         # concatenate image features as source words
         emb = torch.cat((img_feats[0].unsqueeze(0), emb, img_feats[1].unsqueeze(0)), 0)
         # length after concatenating two new words to source
-        assert(emb.size(0) == s_len+2), 'Dimensions do not match.'
+        assert (emb.size(0) == s_len + 2), 'Dimensions do not match.'
 
         packed_emb = emb
         if lengths is not None and not self.no_pack_padded_seq:
             # adjust lengths variable to include the two new "image-words"
-            lengths+=2
+            lengths += 2
             # Lengths data is wrapped inside a Variable.
             lengths = lengths.view(-1).tolist()
             packed_emb = pack(emb, lengths)
@@ -870,6 +884,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
        dropout (float) : dropout value for :obj:`nn.Dropout`
        embeddings (:obj:`onmt.modules.Embeddings`): embedding module to use
     """
+
     def __init__(self, rnn_type, bidirectional_encoder, num_layers,
                  hidden_size, attn_type="general",
                  coverage_attn=False, context_gate=None,
@@ -905,7 +920,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         )
         self.attn_img = onmt.modules.GlobalAttention(
             hidden_size,
-            coverage=False, # coverage not yet implemented for visual attention
+            coverage=False,  # coverage not yet implemented for visual attention
             attn_type=attn_type
         )
 
@@ -941,7 +956,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
                         `[tgt_len x batch x src_len]`.
         """
         # transpose image feats from (batch x len x feats) to (len x batch x feats)
-        context_img = context_img.transpose(0,1)
+        context_img = context_img.transpose(0, 1)
 
         # Args Check
         assert isinstance(state, RNNDecoderStateDoublyAttentive)
@@ -953,15 +968,15 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         # END Args Check
 
         # Run the forward pass of the RNN.
-        #hidden, outputs, attns, coverage = self._run_forward_pass(
+        # hidden, outputs, attns, coverage = self._run_forward_pass(
         hidden, outputs, outputs_img, attns, coverage, coverage_img = \
-                self._run_forward_pass(input, context, context_img,
-                        state, context_lengths=context_lengths)
+            self._run_forward_pass(input, context, context_img,
+                                   state, context_lengths=context_lengths)
 
         # Update the state with the result.
         final_output = outputs[-1]
         final_output_img = outputs_img[-1]
-        #state.update_state(hidden, final_output.unsqueeze(0),
+        # state.update_state(hidden, final_output.unsqueeze(0),
         #                   coverage.unsqueeze(0)
         #                   if coverage is not None else None)
         state.update_state(hidden,
@@ -991,20 +1006,19 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
 
     def init_decoder_state(self, src, context, context_img, enc_hidden):
         if isinstance(enc_hidden, tuple):  # LSTM
-            #return RNNDecoderState(context, self.hidden_size,
+            # return RNNDecoderState(context, self.hidden_size,
             #                       tuple([self._fix_enc_hidden(enc_hidden[i])
             #                             for i in range(len(enc_hidden))]))
             return RNNDecoderStateDoublyAttentive(context, context_img,
-                                   self.hidden_size,
-                                   tuple([self._fix_enc_hidden(enc_hidden[i])
-                                         for i in range(len(enc_hidden))]))
+                                                  self.hidden_size,
+                                                  tuple([self._fix_enc_hidden(enc_hidden[i])
+                                                         for i in range(len(enc_hidden))]))
         else:  # GRU
-            #return RNNDecoderState(context, self.hidden_size,
+            # return RNNDecoderState(context, self.hidden_size,
             #                       self._fix_enc_hidden(enc_hidden))
             return RNNDecoderStateDoublyAttentive(context, context_img,
-                                   self.hidden_size,
-                                   self._fix_enc_hidden(enc_hidden))
-
+                                                  self.hidden_size,
+                                                  self._fix_enc_hidden(enc_hidden))
 
 
 class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
@@ -1022,8 +1036,9 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
     Implemented without input_feeding and currently with no `coverage_attn`
     or `copy_attn` support.
     """
+
     def _run_forward_pass(self, input, context, context_img, state,
-            context_lengths=None):
+                          context_lengths=None):
         """
         Private helper for running the specific RNN forward pass.
         Must be overriden by all subclasses.
@@ -1075,13 +1090,13 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         # Calculate the attention.
         attn_outputs, attn_scores = self.attn(
             rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
-            context.transpose(0, 1),                  # (contxt_len, batch, d)
+            context.transpose(0, 1),  # (contxt_len, batch, d)
             context_lengths=context_lengths
         )
         attns["std"] = attn_scores
         attn_img_outputs, attn_img_scores = self.attn_img(
             rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
-            context_img.transpose(0, 1),              # (contxt_img_len, batch, d)
+            context_img.transpose(0, 1),  # (contxt_img_len, batch, d)
             context_lengths=None
         )
         attns["std_img"] = attn_img_scores
@@ -1096,7 +1111,7 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
             outputs = outputs.view(input_len, input_batch, self.hidden_size)
             outputs = self.dropout(outputs)
         else:
-            outputs = self.dropout(attn_outputs)    # (input_len, batch, d)
+            outputs = self.dropout(attn_outputs)  # (input_len, batch, d)
 
         # no context gate on image attention
         outputs_img = self.dropout(attn_img_outputs)
@@ -1112,9 +1127,9 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         # Use pytorch version when available.
         if rnn_type == "SRU":
             return onmt.modules.SRU(
-                    input_size, hidden_size,
-                    num_layers=num_layers,
-                    dropout=dropout)
+                input_size, hidden_size,
+                num_layers=num_layers,
+                dropout=dropout)
 
         return getattr(nn, rnn_type)(
             input_size, hidden_size,
@@ -1235,7 +1250,7 @@ class InputFeedRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
     def _build_rnn(self, rnn_type, input_size,
                    hidden_size, num_layers, dropout):
         assert not rnn_type == "SRU", "SRU doesn't support input feed! " \
-                "Please set -input_feed 0!"
+                                      "Please set -input_feed 0!"
         if rnn_type == "LSTM":
             stacked_cell = onmt.modules.StackedLSTM
         else:
@@ -1251,13 +1266,12 @@ class InputFeedRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         return self.embeddings.embedding_size + self.hidden_size
 
 
-
-
 class NMTImgDModel(nn.Module):
     """
     The encoder + decoder Neural Machine Translation Model
     with image features used to initialise the decoder.
     """
+
     def __init__(self, encoder, decoder, encoder_images, multigpu=False):
         """
         Args:
@@ -1293,7 +1307,6 @@ class NMTImgDModel(nn.Module):
             enc_init_state = enc_hidden + img_proj
         return enc_init_state
 
-
     def forward(self, src, tgt, lengths, img_feats, dec_state=None):
         """
         Args:
@@ -1316,7 +1329,7 @@ class NMTImgDModel(nn.Module):
         tgt = tgt[:-1]  # exclude last target from inputs
         enc_hidden, context = self.encoder(src, lengths)
         enc_init_state = self._combine_enc_state_img_proj(enc_hidden, img_proj)
-        #enc_state = self.decoder.init_decoder_state(src, context, enc_hidden)
+        # enc_state = self.decoder.init_decoder_state(src, context, enc_hidden)
         enc_state = self.decoder.init_decoder_state(src, context, enc_init_state)
         out, dec_state, attns = self.decoder(tgt, context,
                                              enc_state if dec_state is None
@@ -1335,6 +1348,7 @@ class NMTImgEModel(nn.Module):
     The encoder + decoder Neural Machine Translation Model
     with image features used to initialise the encoder.
     """
+
     def __init__(self, encoder, decoder, encoder_images, multigpu=False):
         """
         Args:
@@ -1409,6 +1423,7 @@ class NMTImgWModel(nn.Module):
     The encoder + decoder Neural Machine Translation Model
     with image features used to initialise the encoder.
     """
+
     def __init__(self, encoder, decoder, encoder_images, multigpu=False):
         """
         Args:
@@ -1466,6 +1481,7 @@ class NMTSrcImgModel(nn.Module):
       decoder (:obj:`RNNDecoderBase`): a decoder object
       multi<gpu (bool): setup for multigpu support
     """
+
     def __init__(self, encoder, decoder, encoder_images, multigpu=False):
         self.multigpu = multigpu
         super(NMTSrcImgModel, self).__init__()
@@ -1499,7 +1515,7 @@ class NMTSrcImgModel(nn.Module):
         enc_hidden, context = self.encoder(src, lengths)
 
         # project/transform local image features into the expected structure/shape
-        img_proj = self.encoder_images( img_feats )
+        img_proj = self.encoder_images(img_feats)
         enc_state = self.decoder.init_decoder_state(src, context, img_proj, enc_hidden)
         out, out_imgs, dec_state, attns = self.decoder(tgt, context, img_proj,
                                                        enc_state if dec_state is None
@@ -1546,7 +1562,7 @@ class RNNDecoderStateDoublyAttentive(DecoderState):
         return self.hidden + (self.input_feed, self.input_feed_img)
 
     def update_state(self, rnnstate, input_feed, input_feed_img,
-            coverage, coverage_img):
+                     coverage, coverage_img):
         if not isinstance(rnnstate, tuple):
             self.hidden = (rnnstate,)
         else:
@@ -1560,8 +1576,8 @@ class RNNDecoderStateDoublyAttentive(DecoderState):
         """ Repeat beam_size times along batch dimension. """
         vars = [Variable(e.data.repeat(1, beam_size, 1), volatile=True)
                 for e in self._all]
-        #self.hidden = tuple(vars[:-1])
-        #self.input_feed = vars[-1]
+        # self.hidden = tuple(vars[:-1])
+        # self.input_feed = vars[-1]
         self.hidden = tuple(vars[:-2])
         self.input_feed = vars[-2]
         self.input_feed_img = vars[-1]
