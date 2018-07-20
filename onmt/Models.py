@@ -934,7 +934,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
             self._copy = True
         self._reuse_copy_attn = reuse_copy_attn
 
-    def forward(self, input, context, context_img, state, context_lengths=None):
+    def forward(self, input, context, context_img, state, memory_lengths=None):
         """
         Args:
             input (`LongTensor`): sequences of padded tokens
@@ -945,7 +945,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
                  `[img_feats_len x batch x hidden]`.
             state (:obj:`onmt.Models.DecoderState`):
                  decoder state object to initialize the decoder
-            context_lengths (`LongTensor`): the padded source lengths
+            memory_lengths (`LongTensor`): the padded source lengths
                 `[batch]`.
         Returns:
             (`FloatTensor`,:obj:`onmt.Models.DecoderState`,`FloatTensor`):
@@ -971,7 +971,7 @@ class RNNDecoderBaseDoublyAttentive(nn.Module):
         # hidden, outputs, attns, coverage = self._run_forward_pass(
         hidden, outputs, outputs_img, attns, coverage, coverage_img = \
             self._run_forward_pass(input, context, context_img,
-                                   state, context_lengths=context_lengths)
+                                   state, memory_lengths=memory_lengths)
 
         # Update the state with the result.
         final_output = outputs[-1]
@@ -1038,7 +1038,7 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
     """
 
     def _run_forward_pass(self, input, context, context_img, state,
-                          context_lengths=None):
+                          memory_lengths=None):
         """
         Private helper for running the specific RNN forward pass.
         Must be overriden by all subclasses.
@@ -1051,7 +1051,7 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
                         CNN of size (img_feats_len x batch x hidden_size).
             state (FloatTensor): hidden state from the encoder RNN for
                                  initializing the decoder.
-            context_lengths (LongTensor): the source context lengths.
+            memory_lengths (LongTensor): the source context lengths.
         Returns:
             hidden (Variable): final hidden state from the decoder.
             outputs ([FloatTensor]): an array of outputs (source-language)
@@ -1091,13 +1091,13 @@ class StdRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
         attn_outputs, attn_scores = self.attn(
             rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
             context.transpose(0, 1),  # (contxt_len, batch, d)
-            context_lengths=context_lengths
+            memory_lengths=memory_lengths
         )
         attns["std"] = attn_scores
         attn_img_outputs, attn_img_scores = self.attn_img(
             rnn_output.transpose(0, 1).contiguous(),  # (output_len, batch, d)
             context_img.transpose(0, 1),  # (contxt_img_len, batch, d)
-            context_lengths=None
+            memory_lengths=None
         )
         attns["std_img"] = attn_img_scores
 
@@ -1171,7 +1171,7 @@ class InputFeedRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
           G --> H
     """
 
-    def _run_forward_pass(self, input, context, context_img, state, context_lengths=None):
+    def _run_forward_pass(self, input, context, context_img, state, memory_lengths=None):
         """
         See StdRNNDecoder._run_forward_pass() for description
         of arguments and return values.
@@ -1211,11 +1211,11 @@ class InputFeedRNNDecoderDoublyAttentive(RNNDecoderBaseDoublyAttentive):
             attn_output, attn = self.attn(
                 rnn_output,
                 context.transpose(0, 1),
-                context_lengths=context_lengths)
+                memory_lengths=memory_lengths)
             attn_output_img, attn_img = self.attn_img(
                 rnn_output,
                 context_img.transpose(0, 1),
-                context_lengths=None)
+                memory_lengths=None)
             if self.context_gate is not None:
                 # TODO: context gate should be employed
                 # instead of second RNN transform.
