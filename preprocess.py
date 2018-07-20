@@ -5,7 +5,6 @@ import argparse
 import os
 import glob
 import sys
-
 import torch
 
 import onmt.io
